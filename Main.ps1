@@ -94,7 +94,7 @@ function Show-LatestModuleLog {
 function Invoke-ModuleExecution {
     <#
     .SYNOPSIS
-        Führt die Hauptlogik des Skripts aus, die Administratorrechte erfordert.
+        Führt die Modulverarbeitung aus, die Administratorrechte erfordert.
 
     .DESCRIPTION
         Diese Funktion lädt das ausgewählte Modul und führt die entsprechende Invoke-Funktion aus.
@@ -164,7 +164,7 @@ function Rotate-ModuleLogs {
         Führt die Logrotation für ein Modul aus.
 
     .DESCRIPTION
-        Behalte nur die neuesten drei Log-Dateien für jedes Modul.
+        Behalte nur die neuesten drei Log-Dateien für das angegebene Modul.
 
     .PARAMETER ModuleName
         Der Name des Moduls, dessen Logs rotiert werden sollen.
