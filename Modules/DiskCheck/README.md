@@ -1,124 +1,184 @@
-# DiskCheck PowerShell Module
+# DiskCheck Module
 
 ## Overview
-The DiskCheck module provides comprehensive disk health analysis and monitoring capabilities for Windows systems. It offers detailed insights into disk space utilization, volume health status, file system information, and hardware details across multiple drives.
+The DiskCheck module provides comprehensive disk health analysis and monitoring capabilities. It performs detailed checks of disk health, performance metrics, and system status while providing repair capabilities when needed.
 
 ## Features
-- Comprehensive disk health analysis
-- Detailed volume information reporting
-- Multiple drive support
-- Automatic repair capabilities (via chkdsk)
-- Detailed logging functionality
-- Support for both HDD and SSD drives
-- Hardware information reporting
-- Customizable target drive selection
-
+- 🔍 **Comprehensive Health Checks**
+  - Volume health status
+  - File system integrity
+  - SMART status monitoring
+  - Temperature tracking
+  
+- 📊 **Performance Analysis**
+  - Read/Write latency measurements
+  - Disk queue length monitoring
+  - Idle time tracking
+  - I/O performance metrics
+  
+- 💾 **Storage Management**
+  - Space utilization tracking
+  - Trend analysis
+  - Capacity planning metrics
+  
+- 🛠️ **Repair Capabilities**
+  - Automatic CHKDSK integration
+  - File system error correction
+  - Bad sector management
+  
 ## Requirements
-- PowerShell 5.1 or later
-- Windows operating system
-- Administrator privileges for full functionality (especially repair mode)
+- PowerShell 5.1 or higher
+- Windows Operating System
+- Administrator privileges (for repair operations)
+- Storage management PowerShell modules
 
 ## Installation
-1. Copy the module folder to one of your PowerShell module directories:
-   ```powershell
-   $env:PSModulePath -split ';'
-   ```
-2. Import the module:
-   ```powershell
-   Import-Module DiskCheck
-   ```
+The module is part of the ModularPowerShellFramework. No additional installation steps are required if you're using the framework.
 
 ## Usage
 
-### Basic Usage
+### Basic Health Check
 ```powershell
-# Check all fixed drives
+# Check all drives
 Invoke-DiskCheck
 
 # Check specific drives
 Invoke-DiskCheck -TargetDrives "C:", "D:"
-
-# Check with repair mode
-Invoke-DiskCheck -RepairMode
-
-# Check with verbose output
-Invoke-DiskCheck -VerboseOutput
 ```
 
-### Parameters
+### Detailed Analysis
+```powershell
+# Detailed check with verbose output
+Invoke-DiskCheck -VerboseOutput
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| RepairMode | Switch | No | Enables repair mode to fix found errors using chkdsk |
-| VerboseOutput | Switch | No | Enables detailed console output |
-| TargetDrives | String[] | No | Array of specific drive letters to check. If omitted, checks all fixed drives |
+# Performance-focused analysis
+Invoke-DiskCheck -VerboseOutput -TargetDrives "C:" | Select-Object Performance
+```
 
-## Output Information
-The module provides detailed information for each drive, including:
+### Repair Operations
+```powershell
+# Run with repair mode (requires admin)
+Invoke-DiskCheck -RepairMode -TargetDrives "C:"
 
-### Volume Information
-- Drive letter and label
-- File system type
-- Health status
-- Total size
-- Free space
-- Used space
-- Percentage free
+# Repair with detailed logging
+Invoke-DiskCheck -RepairMode -VerboseOutput -TargetDrives "C:", "D:"
+```
 
-### Disk Information
-- Disk number
-- Model
-- Media type (HDD/SSD)
-- Bus type
-- Health status
-- Operational status
-- Firmware version
-- Partition style
+## Parameters
+
+### RepairMode
+- **Type**: Switch
+- **Required**: No
+- **Admin Required**: Yes
+- **Impact**: High
+- **Description**: Enables automatic repair operations using CHKDSK
+- **Example**:
+  ```powershell
+  Invoke-DiskCheck -RepairMode
+  ```
+
+### VerboseOutput
+- **Type**: Switch
+- **Required**: No
+- **Admin Required**: No
+- **Impact**: Low
+- **Description**: Enables detailed console output including performance metrics
+- **Example**:
+  ```powershell
+  Invoke-DiskCheck -VerboseOutput
+  ```
+
+### TargetDrives
+- **Type**: String[]
+- **Required**: No
+- **Admin Required**: No
+- **Impact**: Low
+- **Description**: Array of drive letters to check. If omitted, checks all fixed drives
+- **Validation**: Must be valid drive letters (e.g., "C:", "D:")
+- **Example**:
+  ```powershell
+  Invoke-DiskCheck -TargetDrives "C:", "D:"
+  ```
+
+## Output
+
+### Drive Summary
+```
+Drive C: Summary:
+-------------------------
+Label: System
+File System: NTFS
+Health Status: Healthy
+Space: 50.25 GB free of 250.00 GB (20.1% free)
+Disk Model: Samsung SSD 970 EVO
+Media Type: SSD
+Bus Type: NVMe
+Disk Health: Healthy
+SMART Status: OK
+Temperature: 35°C
+Performance:
+  Read Latency: 0.2ms
+  Write Latency: 0.3ms
+  Idle Time: 95%
+```
 
 ## Logging
-- Automatic log creation for each operation
-- Logs stored in module's Logs directory
-- Timestamped log files
-- Detailed operation tracking
-- Error logging and troubleshooting information
+- Logs are stored in the module's Logs directory
+- Log files follow the naming pattern: DiskCheck_YYYYMMDD.log
+- Log rotation occurs automatically after 30 days
+- Includes severity levels: Information, Warning, Error
 
 ## Error Handling
-- Robust error handling with detailed error messages
-- Graceful handling of inaccessible drives
-- Comprehensive logging of errors
-- Safe operation termination on critical errors
+The module implements comprehensive error handling:
+- Validates all input parameters
+- Catches and logs all exceptions
+- Provides detailed error messages
+- Implements graceful fallback mechanisms
+
+## Performance Considerations
+- Minimal impact during basic checks
+- Higher resource usage during detailed analysis
+- May impact system performance during repair operations
+- Implements throttling for intensive operations
 
 ## Best Practices
-1. Run with administrator privileges for full functionality
-2. Use repair mode cautiously and only when necessary
-3. Regular disk health monitoring recommended
-4. Review logs for detailed operation information
-5. Back up important data before running repair operations
+1. Run basic checks regularly (daily/weekly)
+2. Schedule detailed analysis during off-peak hours
+3. Review logs periodically for trending issues
+4. Use repair mode only when necessary
+5. Keep regular backups before running repairs
 
-## Security Considerations
-- Requires elevated privileges for repair operations
-- Safe read-only operations by default
-- Careful handling of system drives
-- No modification of system files without explicit permission
+## Troubleshooting
+Common issues and solutions:
+
+### Access Denied
+```powershell
+# Solution: Run PowerShell as Administrator
+Start-Process powershell -Verb RunAs
+```
+
+### Drive Not Found
+```powershell
+# Verify drive existence
+Get-Volume | Select-Object DriveLetter
+```
+
+### Performance Impact
+```powershell
+# Use targeted analysis
+Invoke-DiskCheck -TargetDrives "C:" -VerboseOutput
+```
+
+## Integration
+The module integrates with:
+- Windows Event Log
+- Storage Management APIs
+- Performance Monitor
+- SMART monitoring systems
 
 ## Version History
-- 1.0.0: Initial release with core functionality
-  - Basic disk health checking
-  - Volume information reporting
-  - Repair mode capability
-  - Logging system
-
-## Notes
-- Some operations require administrator privileges
-- Repair mode uses Windows' built-in chkdsk utility
-- Performance may vary based on drive size and system load
-- Always backup important data before running repair operations
-
-## Tags
-- Disk
-- Storage
-- Maintenance
-- Health
-
-## Author
-System Administrator
+- 1.0.0
+  - Initial release
+  - Basic health checks
+  - Performance monitoring
+  - Repair capabilities

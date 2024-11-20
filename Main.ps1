@@ -82,8 +82,9 @@ try {
 
     # Module selection if not specified
     if (-not $ModuleName) {
+        # Get available modules excluding Common module
         $availableModules = Get-ChildItem -Path $ModulesPath -Directory |
-            Where-Object { Test-ModuleHealth $_.Name } |
+            Where-Object { $_.Name -ne "Common" -and (Test-ModuleHealth $_.Name) } |
             Select-Object -ExpandProperty Name
 
         if ($availableModules.Count -eq 0) {

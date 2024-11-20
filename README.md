@@ -12,22 +12,87 @@ A robust, modular PowerShell framework designed for system maintenance and admin
 - 🔐 **Automatic Privilege Elevation**: Seamless handling of administrator privileges
 - 🔄 **Parameter Validation**: Thorough validation of module parameters
 - 📈 **Performance Monitoring**: Execution time tracking and performance metrics
+- 🔍 **Health Checks**: Automated module health verification
+- 📊 **Detailed Reporting**: Structured output for all operations
 
 ## Available Modules
 
-- **BrowserCacheCleanup**: Cleans browser cache files
-- **DiskCheck**: Performs comprehensive disk health analysis
-- **DiskCleanup**: Manages disk space by cleaning unnecessary files
-- **PerformanceOptimization**: Provides system performance optimization with monitoring and analysis
-- **ServiceStatusMonitor**: Tracks Windows service status changes with comprehensive monitoring
-- **TempFileCleanup**: Removes temporary system files
-- **WindowsUpdate**: Manages Windows Update operations
+### BrowserCacheCleanup
+Efficiently manages browser cache files across multiple browsers:
+```powershell
+# Clean all browser caches
+.\Main.ps1 -ModuleName "BrowserCacheCleanup"
+
+# Clean specific browser with size threshold
+.\Main.ps1 -ModuleName "BrowserCacheCleanup" -ModuleParameters @("-BrowserType", "Chrome", "-ThresholdMB", "1000")
+```
+
+### DiskCheck
+Comprehensive disk health analysis and maintenance:
+```powershell
+# Basic health check
+.\Main.ps1 -ModuleName "DiskCheck"
+
+# Detailed analysis with repair
+.\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-RepairMode", "-VerboseOutput", "-TargetDrives", "C:", "D:")
+```
+
+### DiskCleanup
+Advanced disk space management:
+```powershell
+# Standard cleanup
+.\Main.ps1 -ModuleName "DiskCleanup"
+
+# Aggressive cleanup with specific targets
+.\Main.ps1 -ModuleName "DiskCleanup" -ModuleParameters @("-AggressiveMode", "-TargetPaths", "C:\Windows\Temp", "C:\Users\*\AppData\Local\Temp")
+```
+
+### PerformanceOptimization
+System performance analysis and optimization:
+```powershell
+# Basic optimization
+.\Main.ps1 -ModuleName "PerformanceOptimization"
+
+# Targeted optimization with monitoring
+.\Main.ps1 -ModuleName "PerformanceOptimization" -ModuleParameters @("-Areas", "CPU,Memory,Network", "-MonitorDuration", "3600")
+```
+
+### ServiceStatusMonitor
+Windows service monitoring and management:
+```powershell
+# Monitor critical services
+.\Main.ps1 -ModuleName "ServiceStatusMonitor"
+
+# Monitor specific services with alerts
+.\Main.ps1 -ModuleName "ServiceStatusMonitor" -ModuleParameters @("-Services", "wuauserv,spooler", "-AlertThreshold", "300")
+```
+
+### TempFileCleanup
+Temporary file management:
+```powershell
+# Standard cleanup
+.\Main.ps1 -ModuleName "TempFileCleanup"
+
+# Age-based cleanup with exclusions
+.\Main.ps1 -ModuleName "TempFileCleanup" -ModuleParameters @("-MaxAge", "7", "-ExcludePaths", "C:\Important\Temp")
+```
+
+### WindowsUpdate
+Windows Update management:
+```powershell
+# Check for updates
+.\Main.ps1 -ModuleName "WindowsUpdate"
+
+# Install specific updates
+.\Main.ps1 -ModuleName "WindowsUpdate" -ModuleParameters @("-Install", "-Categories", "Security,Critical")
+```
 
 ## Requirements
 
 - PowerShell 5.1 or higher
 - Windows Operating System
 - Administrator privileges for full functionality
+- .NET Framework 4.7.2 or higher
 
 ## Installation
 
@@ -41,49 +106,9 @@ git clone https://github.com/yourusername/ModularPowerShellFramework.git
 cd ModularPowerShellFramework
 ```
 
-## Usage
-
-### Basic Usage
-
-Run the framework without parameters to see the module selection menu:
+3. Verify installation:
 ```powershell
-.\Main.ps1
-```
-
-### Direct Module Execution
-
-Execute a specific module with parameters:
-```powershell
-.\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-RepairMode", "-VerboseOutput")
-```
-
-### Module-Specific Examples
-
-#### DiskCheck Module
-```powershell
-# Basic disk check on all drives
 .\Main.ps1 -ModuleName "DiskCheck"
-
-# Detailed check with repair mode on specific drives
-.\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-RepairMode", "-VerboseOutput", "-TargetDrives", "C:", "D:")
-```
-
-#### ServiceStatusMonitor Module
-```powershell
-# Monitor all services
-.\Main.ps1 -ModuleName "ServiceStatusMonitor"
-
-# Monitor specific services with verbose output
-.\Main.ps1 -ModuleName "ServiceStatusMonitor" -ModuleParameters @("-TargetServices", "wuauserv,spooler", "-VerboseOutput")
-```
-
-#### PerformanceOptimization Module
-```powershell
-# Basic performance optimization
-.\Main.ps1 -ModuleName "PerformanceOptimization"
-
-# Optimize specific areas with verbose output
-.\Main.ps1 -ModuleName "PerformanceOptimization" -ModuleParameters @("-Areas", "CPU,Memory,Network", "-VerboseOutput")
 ```
 
 ## Framework Architecture
@@ -93,6 +118,9 @@ Execute a specific module with parameters:
 ModularPowerShellFramework/
 ├── Main.ps1                 # Main framework script
 ├── Modules/                 # Module directory
+│   ├── Common/             # Shared functionality
+│   │   ├── Logging.psm1    # Common logging functions
+│   │   └── Utilities.psm1  # Shared utilities
 │   ├── BrowserCacheCleanup/
 │   ├── DiskCheck/
 │   ├── DiskCleanup/
@@ -104,25 +132,44 @@ ModularPowerShellFramework/
 ```
 
 ### Module Structure
-Each module follows a consistent structure:
+Each module follows a standardized structure:
 ```
 ModuleName/
 ├── ModuleName.psd1         # Module manifest
 ├── ModuleName.psm1         # Module implementation
 ├── README.md               # Module documentation
-└── Logs/                   # Module-specific logs
+├── Tests/                  # Module tests
+│   ├── Unit/              # Unit tests
+│   └── Integration/       # Integration tests
+└── Logs/                  # Module-specific logs
 ```
 
 ## Creating New Modules
 
 1. Create a new directory under `Modules/` with your module name
-2. Create the module manifest (.psd1) and implementation (.psm1) files
-3. Implement the required `Invoke-ModuleName` function
-4. Follow the established logging and error handling patterns
+2. Use the following template structure:
 
-Example module template:
 ```powershell
-function Invoke-NewModule {
+# ModuleName.psd1
+@{
+    ModuleVersion = '1.0.0'
+    RootModule = 'ModuleName.psm1'
+    FunctionsToExport = @('Invoke-ModuleName')
+    Author = 'Your Name'
+    Description = 'Module description'
+    PowerShellVersion = '5.1'
+    PrivateData = @{
+        PSData = @{
+            Tags = @('Tag1', 'Tag2')
+            Parameters = @{
+                # Define parameters here
+            }
+        }
+    }
+}
+
+# ModuleName.psm1
+function Invoke-ModuleName {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false)]
@@ -131,6 +178,10 @@ function Invoke-NewModule {
 
     begin {
         # Initialize logging
+        $ModuleLogDir = Join-Path $PSScriptRoot "Logs"
+        if (-not (Test-Path $ModuleLogDir)) {
+            New-Item -ItemType Directory -Path $ModuleLogDir | Out-Null
+        }
     }
 
     process {
@@ -139,6 +190,7 @@ function Invoke-NewModule {
         }
         catch {
             # Error handling
+            Write-Error $_
         }
     }
 
@@ -147,8 +199,35 @@ function Invoke-NewModule {
     }
 }
 
-Export-ModuleMember -Function Invoke-NewModule
+Export-ModuleMember -Function Invoke-ModuleName
 ```
+
+## Best Practices
+
+1. **Error Handling**
+   - Use try-catch blocks for critical operations
+   - Log all errors with appropriate context
+   - Implement proper cleanup in catch blocks
+
+2. **Logging**
+   - Use structured logging with timestamps
+   - Include severity levels
+   - Rotate logs to manage disk space
+
+3. **Parameter Validation**
+   - Implement thorough parameter validation
+   - Use appropriate parameter attributes
+   - Document parameter requirements
+
+4. **Performance**
+   - Optimize operations for large datasets
+   - Implement progress reporting
+   - Consider parallel processing where appropriate
+
+5. **Security**
+   - Validate input data
+   - Handle credentials securely
+   - Implement least privilege principle
 
 ## License
 
@@ -158,3 +237,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - PowerShell Team for the robust scripting platform
 - Community contributors and testers
+- Open source PowerShell module authors for inspiration
