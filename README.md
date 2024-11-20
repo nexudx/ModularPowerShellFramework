@@ -1,3 +1,5 @@
+![ModularPowerShellFramework Banner](static/img/banner.webp)
+
 # Modular PowerShell Framework
 
 A robust, modular PowerShell framework designed for system maintenance and administration tasks. This framework provides a structured approach to executing various system maintenance operations with advanced logging, error handling, and reporting capabilities.
