@@ -26,7 +26,7 @@
     Lädt das 'DiskCheck'-Modul und führt es mit dem Parameter -Verbose aus.
 
 .NOTES
-    Stellen Sie sicher, dass das Skript mit Administratorrechten ausgeführt wird.
+    Teile dieses Skripts erfordern Administratorrechte. Die Anzeige des Logs nach der Modulverarbeitung erfordert keine erhöhten Rechte.
 #>
 [CmdletBinding()]
 param(
@@ -37,7 +37,9 @@ param(
     [string[]]$ModuleParameters
 )
 
-# Funktion zur Anzeige des aktuellsten Logs eines Moduls
+# Globale Variablen
+$ModulesPath = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) "Modules"
+
 function Show-LatestModuleLog {
     <#
     .SYNOPSIS
@@ -64,17 +66,16 @@ function Show-LatestModuleLog {
     )
 
     try {
-        # Konstruktion des Modulverzeichnis-Pfads
         $ModuleDirectory = Join-Path $ModulesPath $ModuleName
 
-        # Validierung des Modulverzeichnisses
         if (-not (Test-Path $ModuleDirectory)) {
             Write-Warning "Modulverzeichnis nicht gefunden: $ModuleDirectory"
             return
         }
 
-        # Ermitteln der aktuellsten Log-Datei im Modulverzeichnis
-        $LatestLog = Get-ChildItem -Path $ModuleDirectory -Filter '*.log' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $LatestLog = Get-ChildItem -Path $ModuleDirectory -Filter '*.log' |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
 
         if ($LatestLog) {
             Write-Host "Inhalt des neuesten Logs für Modul '$ModuleName':" -ForegroundColor Cyan
@@ -89,35 +90,85 @@ function Show-LatestModuleLog {
     }
 }
 
-# Beginn des Skripts
+function Invoke-ModuleExecution {
+    <#
+    .SYNOPSIS
+        Führt die Hauptlogik des Skripts aus, die Administratorrechte erfordert.
 
-# Überprüfen, ob als Administrator ausgeführt
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Warning "Dieses Skript erfordert Administratorrechte. Neustart im erhöhten Modus..."
-    # Skript in erhöhter Sitzung neu starten
-    Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`"" -Verb RunAs -Wait
-    exit # Beenden der aktuellen Sitzung
+    .DESCRIPTION
+        Diese Funktion lädt das ausgewählte Modul und führt die entsprechende Invoke-Funktion aus.
+
+    .PARAMETER ModuleName
+        Der Name des zu ladenden Moduls.
+
+    .PARAMETER ModuleParameters
+        Zusätzliche Parameter für die Modul-Invoke-Funktion.
+
+    .EXAMPLE
+        Invoke-ModuleExecution -ModuleName "DiskCheck" -ModuleParameters @("-Verbose")
+
+        Führt das Modul 'DiskCheck' mit dem Parameter -Verbose aus.
+
+    .NOTES
+        Diese Funktion erfordert Administratorrechte.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ModuleName,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$ModuleParameters
+    )
+
+    try {
+        # PSModulePath aktualisieren
+        $env:PSModulePath = "$ModulesPath;$env:PSModulePath"
+
+        # Modul importieren
+        Import-Module $ModuleName -ErrorAction Stop
+
+        # Dynamisch den Befehl mit Parametern zusammenstellen
+        $Command = "Invoke-$ModuleName"
+        $ParamList = @{}
+
+        if ($ModuleParameters) {
+            # Modulparameter parsen
+            for ($i = 0; $i -lt $ModuleParameters.Count; $i++) {
+                $param = $ModuleParameters[$i]
+                if ($param -match '^-(.+)$') {
+                    $ParamName = $matches[1]
+                    $ParamValue = $true
+                    # Überprüfen, ob ein Wert für den Parameter angegeben wurde
+                    if ($i + 1 -lt $ModuleParameters.Count -and -not ($ModuleParameters[$i + 1] -match '^-')) {
+                        $ParamValue = $ModuleParameters[$i + 1]
+                        $i++
+                    }
+                    $ParamList[$ParamName] = $ParamValue
+                }
+            }
+        }
+
+        # Modul-Funktionsaufruf mit Parametern ausführen
+        & $Command @ParamList
+    }
+    catch {
+        Write-Error "Ein Fehler ist aufgetreten: $_"
+    }
+    finally {
+        # Log-Dateiverwaltung: Behalte nur die neuesten drei Log-Dateien für jedes Modul
+        Get-ChildItem -Path $ModulesPath -Recurse -Filter *.log |
+            Group-Object { $_.DirectoryName } |
+            ForEach-Object {
+                $logs = $_.Group | Sort-Object LastWriteTime -Descending
+                $logs | Select-Object -Skip 3 | Remove-Item -Force -ErrorAction SilentlyContinue
+            }
+    }
 }
 
-$ModulesPath = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) "Modules"
-
-# Log-Dateiverwaltung: Behalte nur die neuesten drei Log-Dateien für jedes Modul
-Get-ChildItem -Path $ModulesPath -Recurse -Filter *.log | 
-    Group-Object { $_.DirectoryName } | 
-    ForEach-Object {
-        $logs = $_.Group | Sort-Object LastWriteTime -Descending
-        $logs | Select-Object -Skip 3 | Remove-Item -Force -ErrorAction SilentlyContinue
-    }
+# Hauptlogik
 
 try {
-    # Überprüfen, ob das Modules-Verzeichnis existiert
-    if (-not (Test-Path $ModulesPath)) {
-        throw "Modules-Verzeichnis nicht gefunden: $ModulesPath"
-    }
-
-    # PSModulePath aktualisieren
-    $env:PSModulePath = "$ModulesPath;$env:PSModulePath"
-
     # Wenn kein Modulname angegeben ist, Modul-Auswahlassistent starten
     if (-not $ModuleName) {
         # Verfügbare Module auflisten
@@ -134,39 +185,40 @@ try {
 
         do {
             $selection = Read-Host "Bitte wählen Sie ein Modul durch Eingabe der entsprechenden Zahl"
-            [int]$selection = [int]$selection - 1
+            $selection = [int]$selection - 1
         } until ($selection -ge 0 -and $selection -lt $AvailableModules.Count)
 
         $ModuleName = $AvailableModules[$selection]
     }
 
-    # Modul importieren
-    Import-Module $ModuleName -ErrorAction Stop
+    # Überprüfen, ob als Administrator ausgeführt
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
-    # Dynamisch den Befehl mit Parametern zusammenstellen
-    $Command = "Invoke-$ModuleName"
-    $ParamList = @{}
+    if (-not $isAdmin) {
+        Write-Warning "Die Ausführung des Moduls erfordert Administratorrechte. Neustart im erhöhten Modus..."
 
-    # Modulparameter parsen
-    for ($i = 0; $i -lt $ModuleParameters.Count; $i++) {
-        $param = $ModuleParameters[$i]
-        if ($param -match '^-(.+)$') {
-            $ParamName = $matches[1]
-            $ParamValue = $true
-            # Überprüfen, ob ein Wert für den Parameter angegeben wurde
-            if ($i + 1 -lt $ModuleParameters.Count -and -not ($ModuleParameters[$i + 1] -match '^-')) {
-                $ParamValue = $ModuleParameters[$i + 1]
-                $i++
-            }
-            $ParamList[$ParamName] = $ParamValue
+        # Argumente vorbereiten
+        $argList = "-ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -ModuleName `"$ModuleName`""
+        if ($ModuleParameters) {
+            $paramStr = $ModuleParameters | ForEach-Object { "`"$_`"" } -join ' '
+            $argList += " -ModuleParameters $paramStr"
         }
+
+        # Skript in erhöhter Sitzung neu starten und Parameter übergeben
+        Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait
+
+        # Nach Abschluss des erhöhten Prozesses das neueste Modul-Log anzeigen
+        Show-LatestModuleLog -ModuleName $ModuleName
+        exit
     }
+    else {
+        # Modul ausführen
+        Invoke-ModuleExecution -ModuleName $ModuleName -ModuleParameters $ModuleParameters
 
-    # Modul-Funktionsaufruf mit Parametern ausführen
-    & $Command @ParamList
-
-    # Nach Ausführung des Moduls das aktuellste Log anzeigen
-    Show-LatestModuleLog -ModuleName $ModuleName
+        # Nach Abschluss des Moduls das neueste Modul-Log anzeigen
+        Show-LatestModuleLog -ModuleName $ModuleName
+        exit
+    }
 }
 catch {
     Write-Error "Ein Fehler ist aufgetreten: $_"
