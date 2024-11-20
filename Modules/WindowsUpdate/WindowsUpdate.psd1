@@ -5,13 +5,7 @@
     # AliasesToExport = @{ 'WinUpdate' = 'Invoke-WindowsUpdate' } # Example alias
     PrivateData = @{
         PSData = @{
-            # Example of how to add module-specific parameters (not directly supported, but can be used for documentation)
-            Parameters = @{
-                ModuleVerbose = @{
-                    Type = 'Switch'
-                    Description = 'Outputs verbose messages during execution.'
-                }
-            }
+            # Module-specific parameters section removed as 'ModuleVerbose' is no longer used
         }
     }
 }

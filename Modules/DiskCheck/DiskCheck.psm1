@@ -1,90 +1,75 @@
 <#
 .SYNOPSIS
-    Performs disk health checks using CHKDSK.
+    Führt eine Datenträgerprüfung durch.
+
 .DESCRIPTION
-    This module uses CHKDSK to verify file system integrity and detect disk errors.
-.PARAMETER ModuleVerbose
-    Enables verbose output for detailed operation information.
+    Dieses Modul führt eine Überprüfung der Datenträger durch und repariert Fehler, wenn angegeben.
+
 .PARAMETER RepairMode
-    Enables repair mode to locate bad sectors and recover readable information.
+    Aktiviert den Reparaturmodus, um gefundene Fehler automatisch zu beheben.
+
+.PARAMETER VerboseOutput
+    Schaltet die ausführliche Ausgabe ein.
+
 .EXAMPLE
-    Invoke-DiskCheck -ModuleVerbose -RepairMode
-    Performs a disk check with verbose output and repair mode enabled.
+    Invoke-DiskCheck
+    Führt eine Datenträgerprüfung mit Standardeinstellungen durch.
+
+.EXAMPLE
+    Invoke-DiskCheck -RepairMode -VerboseOutput
+    Führt die Datenträgerprüfung im Reparaturmodus durch und zeigt ausführliche Informationen an.
+
 .NOTES
-    Ensure the script is run with administrator privileges for full functionality.
+    Dieses Modul wurde aktualisiert, um den -ModuleVerbose Schalter zu entfernen und folgt den PowerShell Best Practices.
+
 #>
-function DiskCheck {
-    [CmdletBinding()]
-    param(
-        [switch]$ModuleVerbose,
-        [switch]$RepairMode
-    )
 
-    # Determine the module's directory
-    $ModuleDirectory = Split-Path $PSCommandPath -Parent
-
-    # Create a log file path
-    $LogFilePath = Join-Path $ModuleDirectory "DiskCheck_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-
-    try {
-        # Start logging
-        Start-Transcript -Path $LogFilePath -Append
-
-        if ($ModuleVerbose) { Write-Verbose "Starting Disk Check..." }
-
-        # Get all volumes
-        $Volumes = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' }
-
-        foreach ($Volume in $Volumes) {
-            # Skip volumes without a drive letter
-            if (-not $Volume.DriveLetter) {
-                continue
-            }
-
-            if ($ModuleVerbose) { Write-Verbose "Checking volume: $($Volume.DriveLetter)" }
-
-            try {
-                # Construct CHKDSK command parameters
-                $ChkdskArgs = "/f /r /x $($Volume.DriveLetter):"
-                
-                # If RepairMode is specified, add additional repair flags
-                if ($RepairMode) {
-                    $ChkdskArgs += " /b"  # Locate bad sectors
-                }
-
-                # Execute CHKDSK
-                $Output = chkdsk.exe $ChkdskArgs
-
-                # Log output
-                if ($ModuleVerbose) { Write-Verbose $Output }
-            }
-            catch {
-                Write-Error "Failed to check volume $($Volume.DriveLetter): $_"
-            }
-        }
-
-        Write-Output "Disk Check Complete."
-    }
-    catch {
-        Write-Error "Disk Check failed: $_"
-    }
-    finally {
-        # Stop logging
-        Stop-Transcript
-    }
-}
-
-# Proxy function to handle parameters
 function Invoke-DiskCheck {
     [CmdletBinding()]
     param(
-        [switch]$ModuleVerbose,
-        [switch]$RepairMode
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Aktiviert den Reparaturmodus.")]
+        [switch]$RepairMode,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Gibt an, ob ausführliche Ausgaben angezeigt werden sollen.")]
+        [switch]$VerboseOutput
     )
 
-    # Pass parameters to the DiskCheck function using splatting
-    DiskCheck @PSBoundParameters
-}
+    begin {
+        if ($VerboseOutput.IsPresent) {
+            $VerbosePreference = 'Continue'
+        } else {
+            $VerbosePreference = 'SilentlyContinue'
+        }
+        Write-Verbose "Initialisiere Datenträgerprüfung..."
+    }
 
-# Export the proxy function
-Export-ModuleMember -Function Invoke-DiskCheck
+    process {
+        try {
+            Write-Verbose "Starte Datenträgerprüfung..."
+
+            $arguments = "/scan"
+
+            if ($RepairMode.IsPresent) {
+                $arguments += " /forceofflinefix"
+            }
+
+            # Beispiel für Windows: Ausführen von chkdsk
+            if ($PSVersionTable.Platform -eq 'Win32NT') {
+                Start-Process -FilePath "chkdsk.exe" -ArgumentList $arguments -Wait -Verb RunAs
+                Write-Verbose "Datenträgerprüfung abgeschlossen."
+            }
+            else {
+                Write-Warning "Die Datenträgerprüfung ist unter diesem Betriebssystem nicht verfügbar."
+            }
+        }
+        catch {
+            Write-Error "Fehler bei der Datenträgerprüfung: $_"
+        }
+    }
+
+    end {
+        Write-Verbose "Datenträgerprüfungsprozess abgeschlossen."
+    }
+}

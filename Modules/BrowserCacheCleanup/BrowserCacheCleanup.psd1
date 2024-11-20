@@ -4,12 +4,7 @@
     FunctionsToExport = 'Invoke-BrowserCacheCleanup'
     PrivateData = @{
         PSData = @{
-            Parameters = @{
-                ModuleVerbose = @{
-                    Type = 'Switch'
-                    Description = 'Outputs verbose messages during browser cache cleanup.'
-                }
-            }
+            # 'Parameters' Sektion entfernt, da 'ModuleVerbose' nicht mehr verwendet wird
         }
     }
 }

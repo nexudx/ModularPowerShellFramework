@@ -4,12 +4,7 @@
     FunctionsToExport = 'Invoke-TempFileCleanup'
     PrivateData = @{
         PSData = @{
-            Parameters = @{
-                ModuleVerbose = @{
-                    Type = 'Switch'
-                    Description = 'Outputs detailed messages during temporary file cleanup.'
-                }
-            }
+            # 'Parameters' Sektion entfernt, da 'ModuleVerbose' nicht mehr verwendet wird
         }
     }
 }
