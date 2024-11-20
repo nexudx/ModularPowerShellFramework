@@ -1,4 +1,4 @@
-![ModularPowerShellFramework Banner](static/img/banner.webp)
+![ModularPowerShellFramework Banner](docs/static/img/banner.webp)
 
 # Modular PowerShell Framework
 
