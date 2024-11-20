@@ -107,21 +107,24 @@ Invoke-$ModuleName
     Show-ModuleOutput -ModuleName $ModuleName
 }
 
+function Get-AvailableModules {
+    Get-ChildItem -Path $ModulesPath -Directory |
+        Where-Object { $_.Name -ne "Common" -and (Test-ModuleHealth $_.Name) } |
+        Select-Object -ExpandProperty Name
+}
+
 # Main execution
 try {
     Write-FrameworkLog "Framework execution started"
 
-    # Module selection if not specified
+    # Get available modules
+    $availableModules = Get-AvailableModules
+    if ($availableModules.Count -eq 0) {
+        throw "No healthy modules found"
+    }
+
+    # Module selection handling
     if (-not $ModuleNames -or $ModuleNames.Count -eq 0) {
-        # Get available modules excluding Common module
-        $availableModules = Get-ChildItem -Path $ModulesPath -Directory |
-            Where-Object { $_.Name -ne "Common" -and (Test-ModuleHealth $_.Name) } |
-            Select-Object -ExpandProperty Name
-
-        if ($availableModules.Count -eq 0) {
-            throw "No healthy modules found"
-        }
-
         Write-Host "`nAvailable Modules:"
         for ($i = 0; $i -lt $availableModules.Count; $i++) {
             Write-Host "[$($i + 1)] $($availableModules[$i])"
@@ -147,6 +150,11 @@ try {
         } until ($selectedModules.Count -gt 0)
 
         $ModuleNames = $selectedModules
+    }
+    # Handle 'all' parameter
+    elseif ($ModuleNames.Count -eq 1 -and $ModuleNames[0].ToLower() -eq 'all') {
+        Write-FrameworkLog "All modules selected via parameter"
+        $ModuleNames = $availableModules
     }
 
     # Check administrator privileges
