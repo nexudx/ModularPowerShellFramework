@@ -1,3 +1,6 @@
+# Import common module
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) "Common\Common.psm1")
+
 <#
 .SYNOPSIS
     Enhanced Windows service status monitor with comprehensive change detection.
@@ -65,64 +68,15 @@ function Invoke-ServiceStatusMonitor {
             $VerbosePreference = 'Continue'
         }
 
-        # Setup directories and files
-        $ModuleDir = Join-Path $PSScriptRoot "Logs"
-        $DefaultStateFile = Join-Path $ModuleDir "ServiceState.json"
+        # Initialize module operation
+        $operation = Start-ModuleOperation -ModuleName 'ServiceStatusMonitor'
+        if (-not $operation.Success) {
+            throw "Failed to initialize ServiceStatusMonitor operation"
+        }
+
+        # Setup state file path
+        $DefaultStateFile = Join-Path $operation.LogDirectory "ServiceState.json"
         $StateFilePath = if ($StateFile) { $StateFile } else { $DefaultStateFile }
-        
-        if (-not (Test-Path $ModuleDir)) {
-            New-Item -ItemType Directory -Path $ModuleDir -Force | Out-Null
-            Write-Verbose "Created logs directory: $ModuleDir"
-        }
-
-        $CurrentLogFile = Join-Path $ModuleDir "ServiceStatus_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        Write-Verbose "Initializing new log file: $CurrentLogFile"
-
-        # Initialize logging function with enhanced error context
-        function Write-ServiceLog {
-            param(
-                [Parameter(Mandatory = $true)]
-                [string]$Message,
-                
-                [Parameter(Mandatory = $false)]
-                [ValidateSet('Info', 'Warning', 'Error')]
-                [string]$Level = 'Info',
-
-                [Parameter(Mandatory = $false)]
-                [System.Management.Automation.ErrorRecord]$ErrorRecord
-            )
-            
-            $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            $LogEntry = "[$Timestamp] [$Level] - $Message"
-            
-            # Add detailed error context if available
-            if ($ErrorRecord) {
-                $errorContext = @"
-Error Details:
-- Exception Type: $($ErrorRecord.Exception.GetType().FullName)
-- Message: $($ErrorRecord.Exception.Message)
-- Category: $($ErrorRecord.CategoryInfo.Category)
-- Target Object: $($ErrorRecord.TargetObject)
-- Fully Qualified Error ID: $($ErrorRecord.FullyQualifiedErrorId)
-"@
-                $LogEntry += "`n$errorContext"
-            }
-            
-            try {
-                $LogEntry | Add-Content -Path $CurrentLogFile -ErrorAction Stop
-                if ($VerboseOutput -or $Level -ne 'Info') {
-                    switch ($Level) {
-                        'Warning' { Write-Warning $Message }
-                        'Error' { Write-Warning $Message }
-                        default { Write-Host $LogEntry }
-                    }
-                }
-            }
-            catch {
-                Write-Warning "Failed to write to log file: $_"
-                Write-Host $LogEntry
-            }
-        }
 
         # Function to check for elevated privileges
         function Test-ElevatedPrivileges {
@@ -133,7 +87,7 @@ Error Details:
                 return $principal.IsInRole($adminRole)
             }
             catch {
-                Write-ServiceLog "Error checking privileges: $_" -Level 'Warning' -ErrorRecord $_
+                Write-ModuleLog -Message "Error checking privileges: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 return $false
             }
         }
@@ -174,13 +128,13 @@ Error Details:
                     }
                 }
                 catch [System.UnauthorizedAccessException] {
-                    Write-ServiceLog "Access denied for service '$($Service.Name)' - requires elevated privileges" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Access denied for service '$($Service.Name)' - requires elevated privileges" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
                 catch [Microsoft.Management.Infrastructure.CimException] {
-                    Write-ServiceLog "Service '$($Service.Name)' cannot be queried due to the following error: $($_.Exception.Message)" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Service '$($Service.Name)' cannot be queried due to the following error: $($_.Exception.Message)" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
                 catch {
-                    Write-ServiceLog "Unexpected error accessing service '$($Service.Name)': $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Unexpected error accessing service '$($Service.Name)': $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
 
                 # Try to get dependencies with specific error handling
@@ -188,10 +142,10 @@ Error Details:
                     $basicInfo.Dependencies = @($Service.ServicesDependedOn | Select-Object -ExpandProperty Name)
                 }
                 catch [System.Security.SecurityException] {
-                    Write-ServiceLog "Access denied when retrieving dependencies for service '$($Service.Name)'" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Access denied when retrieving dependencies for service '$($Service.Name)'" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
                 catch {
-                    Write-ServiceLog "Error retrieving dependencies for service '$($Service.Name)': $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Error retrieving dependencies for service '$($Service.Name)': $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
 
                 # Try to get process ID with specific error handling
@@ -201,16 +155,16 @@ Error Details:
                     }
                 }
                 catch [System.ComponentModel.Win32Exception] {
-                    Write-ServiceLog "Access denied when retrieving process ID for service '$($Service.Name)'" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Access denied when retrieving process ID for service '$($Service.Name)'" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
                 catch {
-                    Write-ServiceLog "Error retrieving process ID for service '$($Service.Name)': $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Error retrieving process ID for service '$($Service.Name)': $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
 
                 return $basicInfo
             }
             catch {
-                Write-ServiceLog "Critical error processing service '$($Service.Name)': $_" -Level 'Warning' -ErrorRecord $_
+                Write-ModuleLog -Message "Critical error processing service '$($Service.Name)': $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 return $null
             }
         }
@@ -227,15 +181,15 @@ Error Details:
                     return $servicesHash
                 }
                 catch [System.IO.IOException] {
-                    Write-ServiceLog "File access error reading state file: $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "File access error reading state file: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                     return $null
                 }
                 catch [System.Management.Automation.RuntimeException] {
-                    Write-ServiceLog "JSON parsing error in state file: $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "JSON parsing error in state file: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                     return $null
                 }
                 catch {
-                    Write-ServiceLog "Unexpected error reading state file: $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Unexpected error reading state file: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                     return $null
                 }
             }
@@ -255,13 +209,13 @@ Error Details:
                 [System.IO.File]::WriteAllText($StateFilePath, $stateJson)
             }
             catch [System.UnauthorizedAccessException] {
-                Write-ServiceLog "Access denied when saving state file: $_" -Level 'Warning' -ErrorRecord $_
+                Write-ModuleLog -Message "Access denied when saving state file: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
             }
             catch [System.IO.IOException] {
-                Write-ServiceLog "File system error when saving state file: $_" -Level 'Warning' -ErrorRecord $_
+                Write-ModuleLog -Message "File system error when saving state file: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
             }
             catch {
-                Write-ServiceLog "Unexpected error saving state file: $_" -Level 'Warning' -ErrorRecord $_
+                Write-ModuleLog -Message "Unexpected error saving state file: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
             }
         }
 
@@ -306,35 +260,11 @@ Error Details:
 
             return $changes
         }
-
-        # Enhanced log cleanup with error handling
-        function Remove-OldLogs {
-            try {
-                $cutoffDate = (Get-Date).AddDays(-$LogRetentionDays)
-                Get-ChildItem -Path $ModuleDir -Filter "ServiceStatus_*.log" |
-                    Where-Object { $_.LastWriteTime -lt $cutoffDate } |
-                    ForEach-Object {
-                        try {
-                            Remove-Item $_.FullName -Force -ErrorAction Stop
-                            Write-ServiceLog "Removed old log file: $($_.Name)" -Level 'Info'
-                        }
-                        catch [System.UnauthorizedAccessException] {
-                            Write-ServiceLog "Access denied when removing old log file $($_.Name)" -Level 'Warning' -ErrorRecord $_
-                        }
-                        catch {
-                            Write-ServiceLog "Error removing old log file $($_.Name): $_" -Level 'Warning' -ErrorRecord $_
-                        }
-                    }
-            }
-            catch {
-                Write-ServiceLog "Error during log cleanup: $_" -Level 'Warning' -ErrorRecord $_
-            }
-        }
     }
 
     process {
         try {
-            Write-ServiceLog "Starting service status monitor..."
+            Write-ModuleLog -Message "Starting service status monitor..." -ModuleName 'ServiceStatusMonitor'
             
             # Enhanced privilege check with specific recommendations
             $isAdmin = Test-ElevatedPrivileges
@@ -347,7 +277,7 @@ To get full access to all services:
 3. Select 'Run as Administrator'
 4. Re-run this command
 "@
-                Write-ServiceLog $elevationMessage -Level 'Warning'
+                Write-ModuleLog -Message $elevationMessage -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
             }
 
             # Load previous state
@@ -355,21 +285,21 @@ To get full access to all services:
             
             # Get current services with enhanced error handling
             $services = if ($TargetServices) {
-                Write-ServiceLog "Filtering for specific services: $($TargetServices -join ', ')"
+                Write-ModuleLog -Message "Filtering for specific services: $($TargetServices -join ', ')" -ModuleName 'ServiceStatusMonitor'
                 $TargetServices | ForEach-Object { 
                     try {
                         Get-Service -Name $_ -ErrorAction Stop
                     }
                     catch [System.InvalidOperationException] {
-                        Write-ServiceLog "Service '$_' not found" -Level 'Warning' -ErrorRecord $_
+                        Write-ModuleLog -Message "Service '$_' not found" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                         $null
                     }
                     catch [System.Security.SecurityException] {
-                        Write-ServiceLog "Access denied for service '$_'" -Level 'Warning' -ErrorRecord $_
+                        Write-ModuleLog -Message "Access denied for service '$_'" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                         $null
                     }
                     catch {
-                        Write-ServiceLog "Error accessing service '$_': $_" -Level 'Warning' -ErrorRecord $_
+                        Write-ModuleLog -Message "Error accessing service '$_': $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                         $null
                     }
                 } | Where-Object { $_ -ne $null }
@@ -379,11 +309,11 @@ To get full access to all services:
                     Get-Service -ErrorAction Stop
                 }
                 catch [System.Security.SecurityException] {
-                    Write-ServiceLog "Access denied when retrieving services - requires elevated privileges" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Access denied when retrieving services - requires elevated privileges" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                     @()
                 }
                 catch {
-                    Write-ServiceLog "Error retrieving services: $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Error retrieving services: $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                     @()
                 }
             }
@@ -415,7 +345,7 @@ To get full access to all services:
                     }
                 }
                 catch {
-                    Write-ServiceLog "Error processing service $($service.Name): $_" -Level 'Warning' -ErrorRecord $_
+                    Write-ModuleLog -Message "Error processing service $($service.Name): $_" -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                     $accessStats.Failed++
                 }
             }
@@ -429,7 +359,7 @@ Service Access Summary:
 - Limited Access: $($accessStats.LimitedAccess)
 - Failed Access: $($accessStats.Failed)
 "@
-                Write-ServiceLog $accessSummary -Level 'Warning'
+                Write-ModuleLog -Message $accessSummary -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
             }
 
             # Compare states and detect changes
@@ -438,7 +368,7 @@ Service Access Summary:
             # Enhanced change logging
             if ($changes.Modified.Count -gt 0 -or $changes.New.Count -gt 0 -or 
                 $changes.Removed.Count -gt 0 -or $changes.AccessDenied.Count -gt 0) {
-                Write-ServiceLog "Service Changes Detected:" -Level 'Info'
+                Write-ModuleLog -Message "Service Changes Detected:" -ModuleName 'ServiceStatusMonitor'
 
                 foreach ($change in $changes.Modified) {
                     $changeDetails = @"
@@ -457,7 +387,7 @@ Current State:
   - Dependencies: $($change.Current.Dependencies -join ', ')
   - Access Level: $($change.Current.AccessLevel)
 "@
-                    Write-ServiceLog $changeDetails
+                    Write-ModuleLog -Message $changeDetails -ModuleName 'ServiceStatusMonitor'
                 }
 
                 foreach ($new in $changes.New) {
@@ -472,7 +402,7 @@ New Service Detected: $($new.DisplayName) ($($new.Name))
   - Dependencies: $($new.Dependencies -join ', ')
   - Access Level: $($new.AccessLevel)
 "@
-                    Write-ServiceLog $newDetails
+                    Write-ModuleLog -Message $newDetails -ModuleName 'ServiceStatusMonitor'
                 }
 
                 foreach ($removed in $changes.Removed) {
@@ -483,7 +413,7 @@ Removed Service: $($removed.DisplayName) ($($removed.Name))
   - Last Known StartType: $($removed.StartType)
   - Last Known Account: $($removed.Account)
 "@
-                    Write-ServiceLog $removedDetails
+                    Write-ModuleLog -Message $removedDetails -ModuleName 'ServiceStatusMonitor'
                 }
 
                 if ($changes.AccessDenied.Count -gt 0) {
@@ -492,21 +422,23 @@ Removed Service: $($removed.DisplayName) ($($removed.Name))
 Services with Limited Access:
 $($changes.AccessDenied | ForEach-Object { "- $($_.DisplayName) ($($_.Name))" } | Out-String)
 "@
-                    Write-ServiceLog $accessDeniedDetails -Level 'Warning'
+                    Write-ModuleLog -Message $accessDeniedDetails -Severity 'Warning' -ModuleName 'ServiceStatusMonitor'
                 }
             }
             else {
-                Write-ServiceLog "No service changes detected."
+                Write-ModuleLog -Message "No service changes detected." -ModuleName 'ServiceStatusMonitor'
             }
 
             # Save current state
             Save-CurrentState -ServiceState $currentState
 
-            # Cleanup old logs
-            Remove-OldLogs
+            # Complete module operation successfully
+            Stop-ModuleOperation -ModuleName 'ServiceStatusMonitor' -StartTime $operation.StartTime -Success $true
         }
         catch {
-            Write-ServiceLog "Critical error during service monitoring: $_" -Level 'Warning' -ErrorRecord $_
+            Write-ModuleLog -Message "Critical error during service monitoring: $_" -Severity 'Error' -ModuleName 'ServiceStatusMonitor'
+            Stop-ModuleOperation -ModuleName 'ServiceStatusMonitor' -StartTime $operation.StartTime -Success $false -ErrorMessage $_.Exception.Message
+            throw
         }
     }
 
@@ -521,10 +453,10 @@ New Services: $($changes.New.Count)
 Removed Services: $($changes.Removed.Count)
 Services with Limited Access: $($changes.AccessDenied.Count)
 Running with Administrator Privileges: $($isAdmin)
-Log File: $CurrentLogFile
 State File: $StateFilePath
 "@
-        Write-ServiceLog $summary
+        Write-ModuleLog -Message $summary -ModuleName 'ServiceStatusMonitor'
+        Write-Host $summary
     }
 }
 

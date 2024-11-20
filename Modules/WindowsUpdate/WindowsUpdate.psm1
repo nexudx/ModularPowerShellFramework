@@ -1,3 +1,6 @@
+# Import common module
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) "Common\Common.psm1")
+
 <#
 .SYNOPSIS
     Enhanced Windows Update management with advanced features and reporting.
@@ -81,50 +84,21 @@ function Invoke-WindowsUpdate {
             $VerbosePreference = 'Continue'
         }
 
-        # Create module directory if it doesn't exist
-        $ModuleDir = Join-Path $PSScriptRoot "Logs"
-        if (-not (Test-Path $ModuleDir)) {
-            New-Item -ItemType Directory -Path $ModuleDir | Out-Null
+        # Initialize module operation
+        $operation = Start-ModuleOperation -ModuleName 'WindowsUpdate'
+        if (-not $operation.Success) {
+            throw "Failed to initialize WindowsUpdate operation"
         }
 
-        # Initialize log files with mutex for thread safety
-        $script:LogFile = Join-Path $ModuleDir "WindowsUpdate_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        $script:HistoryFile = Join-Path $ModuleDir "UpdateHistory.json"
-        $script:LogMutex = New-Object System.Threading.Mutex($false, "GlobalWindowsUpdateLogMutex")
-
-        function Write-UpdateLog {
-            param(
-                [Parameter(Mandatory = $true)]
-                [string]$Message,
-                
-                [Parameter(Mandatory = $false)]
-                [ValidateSet('Information', 'Warning', 'Error')]
-                [string]$Severity = 'Information'
-            )
-            
-            $LogMessage = "[$(Get-Date)] [$Severity] - $Message"
-            
-            $script:LogMutex.WaitOne() | Out-Null
-            try {
-                $LogMessage | Add-Content -Path $script:LogFile
-                
-                switch ($Severity) {
-                    'Warning' { Write-Warning $Message }
-                    'Error' { Write-Error $Message }
-                    default { Write-Verbose $Message }
-                }
-            }
-            finally {
-                $script:LogMutex.ReleaseMutex()
-            }
-        }
+        # Initialize history file path
+        $script:HistoryFile = Join-Path $operation.LogDirectory "UpdateHistory.json"
 
         function Test-PSWindowsUpdate {
             try {
                 if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-                    Write-UpdateLog "Installing PSWindowsUpdate module..." -Severity 'Warning'
+                    Write-ModuleLog -Message "Installing PSWindowsUpdate module..." -Severity 'Warning' -ModuleName 'WindowsUpdate'
                     Install-Module -Name PSWindowsUpdate -Force -ErrorAction Stop
-                    Write-UpdateLog "PSWindowsUpdate module installed successfully."
+                    Write-ModuleLog -Message "PSWindowsUpdate module installed successfully." -ModuleName 'WindowsUpdate'
                 }
                 Import-Module -Name PSWindowsUpdate -ErrorAction Stop
                 
@@ -133,7 +107,7 @@ function Invoke-WindowsUpdate {
                 return $true
             }
             catch {
-                Write-UpdateLog "Error with PSWindowsUpdate module: $_" -Severity 'Error'
+                Write-ModuleLog -Message "Error with PSWindowsUpdate module: $_" -Severity 'Error' -ModuleName 'WindowsUpdate'
                 return $false
             }
         }
@@ -142,7 +116,7 @@ function Invoke-WindowsUpdate {
             try {
                 $bits = Get-Service -Name BITS -ErrorAction Stop
                 if ($bits.Status -ne 'Running') {
-                    Write-UpdateLog "Starting BITS service..." -Severity 'Warning'
+                    Write-ModuleLog -Message "Starting BITS service..." -Severity 'Warning' -ModuleName 'WindowsUpdate'
                     Start-Service -Name BITS -ErrorAction Stop
                     Start-Sleep -Seconds 2
                     
@@ -154,7 +128,7 @@ function Invoke-WindowsUpdate {
                 return $true
             }
             catch {
-                Write-UpdateLog "BITS service error: $_" -Severity 'Error'
+                Write-ModuleLog -Message "BITS service error: $_" -Severity 'Error' -ModuleName 'WindowsUpdate'
                 return $false
             }
         }
@@ -169,35 +143,29 @@ function Invoke-WindowsUpdate {
 
                 $bitsManager = New-Object -ComObject "Microsoft.BackgroundIntelligentTransfer.Management.5.1"
                 $bitsManager.SetBandwidthLimitation($Mbps * 1000000)
-                Write-UpdateLog "Bandwidth limit set to $Mbps Mbps"
+                Write-ModuleLog -Message "Bandwidth limit set to $Mbps Mbps" -ModuleName 'WindowsUpdate'
                 return $true
             }
             catch {
-                Write-UpdateLog "Error setting bandwidth limit: $_" -Severity 'Error'
+                Write-ModuleLog -Message "Error setting bandwidth limit: $_" -Severity 'Error' -ModuleName 'WindowsUpdate'
                 return $false
             }
         }
 
         function Get-UpdateHistory {
             try {
-                $script:LogMutex.WaitOne() | Out-Null
-                try {
-                    if (Test-Path $script:HistoryFile) {
-                        $history = Get-Content $script:HistoryFile | ConvertFrom-Json
-                        # Validate history structure
-                        if ($history -isnot [array]) {
-                            throw "Invalid history file format"
-                        }
-                        return $history
+                if (Test-Path $script:HistoryFile) {
+                    $history = Get-Content $script:HistoryFile | ConvertFrom-Json
+                    # Validate history structure
+                    if ($history -isnot [array]) {
+                        throw "Invalid history file format"
                     }
-                    return @()
+                    return $history
                 }
-                finally {
-                    $script:LogMutex.ReleaseMutex()
-                }
+                return @()
             }
             catch {
-                Write-UpdateLog "Error reading update history: $_" -Severity 'Error'
+                Write-ModuleLog -Message "Error reading update history: $_" -Severity 'Error' -ModuleName 'WindowsUpdate'
                 return @()
             }
         }
@@ -206,26 +174,20 @@ function Invoke-WindowsUpdate {
             param($Updates)
             
             try {
-                $script:LogMutex.WaitOne() | Out-Null
-                try {
-                    $history = Get-UpdateHistory
-                    $newEntry = @{
-                        Date = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-                        Updates = $Updates | Select-Object Title, KB, Status
-                        System = @{
-                            OSVersion = [System.Environment]::OSVersion.Version.ToString()
-                            LastBootTime = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime.ToString()
-                        }
+                $history = Get-UpdateHistory
+                $newEntry = @{
+                    Date = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                    Updates = $Updates | Select-Object Title, KB, Status
+                    System = @{
+                        OSVersion = [System.Environment]::OSVersion.Version.ToString()
+                        LastBootTime = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime.ToString()
                     }
-                    $history += $newEntry
-                    $history | ConvertTo-Json -Depth 10 | Set-Content $script:HistoryFile
                 }
-                finally {
-                    $script:LogMutex.ReleaseMutex()
-                }
+                $history += $newEntry
+                $history | ConvertTo-Json -Depth 10 | Set-Content $script:HistoryFile
             }
             catch {
-                Write-UpdateLog "Error saving update history: $_" -Severity 'Error'
+                Write-ModuleLog -Message "Error saving update history: $_" -Severity 'Error' -ModuleName 'WindowsUpdate'
             }
         }
 
@@ -255,7 +217,7 @@ function Invoke-WindowsUpdate {
                 return $pendingReboot
             }
             catch {
-                Write-UpdateLog "Error checking pending reboot: $_" -Severity 'Warning'
+                Write-ModuleLog -Message "Error checking pending reboot: $_" -Severity 'Warning' -ModuleName 'WindowsUpdate'
                 return $false
             }
         }
@@ -263,7 +225,7 @@ function Invoke-WindowsUpdate {
 
     process {
         try {
-            Write-UpdateLog "Starting enhanced Windows Update process..."
+            Write-ModuleLog -Message "Starting enhanced Windows Update process..." -ModuleName 'WindowsUpdate'
 
             # Check for pending reboot
             if (Test-PendingReboot) {
@@ -278,7 +240,7 @@ function Invoke-WindowsUpdate {
             # Set bandwidth limit if specified
             if ($MaxBandwidth) {
                 if (-not (Set-UpdateBandwidth -Mbps $MaxBandwidth)) {
-                    Write-UpdateLog "Continuing without bandwidth limit" -Severity 'Warning'
+                    Write-ModuleLog -Message "Continuing without bandwidth limit" -Severity 'Warning' -ModuleName 'WindowsUpdate'
                 }
             }
 
@@ -297,11 +259,11 @@ function Invoke-WindowsUpdate {
             }
 
             # Get available updates
-            Write-UpdateLog "Checking for available updates..."
+            Write-ModuleLog -Message "Checking for available updates..." -ModuleName 'WindowsUpdate'
             $updates = Get-WindowsUpdate @criteria -ErrorAction Stop
 
             if ($updates.Count -gt 0) {
-                Write-UpdateLog "Found $($updates.Count) updates"
+                Write-ModuleLog -Message "Found $($updates.Count) updates" -ModuleName 'WindowsUpdate'
                 
                 # Display updates and prompt for confirmation
                 if (-not $Force) {
@@ -324,7 +286,7 @@ function Invoke-WindowsUpdate {
                     Duration = $stopwatch.Elapsed.ToString()
                 }
 
-                Write-UpdateLog "Update Statistics: $($statistics | ConvertTo-Json)"
+                Write-ModuleLog -Message "Update Statistics: $($statistics | ConvertTo-Json)" -ModuleName 'WindowsUpdate'
 
                 # Save to history
                 Save-UpdateHistory -Updates $result
@@ -332,46 +294,43 @@ function Invoke-WindowsUpdate {
                 # Handle reboot if needed
                 if ($result.RebootRequired) {
                     if ($ScheduleReboot) {
-                        Write-UpdateLog "Scheduling reboot for $ScheduleReboot..."
+                        Write-ModuleLog -Message "Scheduling reboot for $ScheduleReboot..." -ModuleName 'WindowsUpdate'
                         $rebootTime = [DateTime]::Parse($ScheduleReboot)
                         $currentTime = Get-Date
                         $delay = $rebootTime - $currentTime
                         
                         if ($delay.TotalSeconds -gt 0) {
                             $delaySeconds = [int]$delay.TotalSeconds
-                            Write-UpdateLog "System will restart in $([math]::Round($delay.TotalHours, 2)) hours"
+                            Write-ModuleLog -Message "System will restart in $([math]::Round($delay.TotalHours, 2)) hours" -ModuleName 'WindowsUpdate'
                             shutdown /r /t $delaySeconds /c "Scheduled restart for Windows Updates"
                         }
                         else {
-                            Write-UpdateLog "Scheduled time is in the past, skipping reboot" -Severity 'Warning'
+                            Write-ModuleLog -Message "Scheduled time is in the past, skipping reboot" -Severity 'Warning' -ModuleName 'WindowsUpdate'
                         }
                     }
                     else {
-                        Write-UpdateLog "Reboot required to complete updates" -Severity 'Warning'
+                        Write-ModuleLog -Message "Reboot required to complete updates" -Severity 'Warning' -ModuleName 'WindowsUpdate'
                         Write-Warning "A system reboot is required to complete the update installation"
                     }
                 }
             }
             else {
-                Write-UpdateLog "No updates available"
+                Write-ModuleLog -Message "No updates available" -ModuleName 'WindowsUpdate'
                 Write-Host "No updates are available at this time"
             }
         }
         catch {
             $errorMessage = "Critical error during Windows Update: $_"
-            Write-UpdateLog $errorMessage -Severity 'Error'
+            Write-ModuleLog -Message $errorMessage -Severity 'Error' -ModuleName 'WindowsUpdate'
+            Stop-ModuleOperation -ModuleName 'WindowsUpdate' -StartTime $operation.StartTime -Success $false -ErrorMessage $_.Exception.Message
             throw $errorMessage
         }
     }
 
     end {
-        Write-UpdateLog "Windows Update process completed. Log file: $LogFile"
-        Write-Host "Windows Update process completed. Log file: $LogFile"
-        
-        # Cleanup
-        if ($script:LogMutex) {
-            $script:LogMutex.Dispose()
-        }
+        # Complete module operation
+        Stop-ModuleOperation -ModuleName 'WindowsUpdate' -StartTime $operation.StartTime -Success $true
+        Write-Host "Windows Update process completed. Check logs for details."
     }
 }
 

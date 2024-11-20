@@ -1,3 +1,6 @@
+# Import common module
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) "Common\Common.psm1")
+
 <#
 .SYNOPSIS
     Performs efficient disk cleanup operations on specified drives.
@@ -43,28 +46,20 @@ function Invoke-DiskCleanup {
     )
 
     begin {
-        # Initialize logging
-        $LogPath = Join-Path $PSScriptRoot "Logs"
-        if (-not (Test-Path $LogPath)) {
-            New-Item -ItemType Directory -Path $LogPath -Force | Out-Null
-        }
-        $LogFile = Join-Path $LogPath "DiskCleanup_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-
-        function Write-CleanupLog {
-            param([string]$Message)
-            $TimeStamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-            "$TimeStamp - $Message" | Add-Content -Path $LogFile
-            Write-Verbose $Message
+        # Initialize module operation
+        $operation = Start-ModuleOperation -ModuleName 'DiskCleanup'
+        if (-not $operation.Success) {
+            throw "Failed to initialize DiskCleanup operation"
         }
 
         # Get initial drive space
         $InitialSpace = (Get-PSDrive -Name $Drive[0]).Free
-        Write-CleanupLog "Initial free space: $([math]::Round($InitialSpace/1GB, 2)) GB"
+        Write-ModuleLog -Message "Initial free space: $([math]::Round($InitialSpace/1GB, 2)) GB" -ModuleName 'DiskCleanup'
     }
 
     process {
         try {
-            Write-CleanupLog "Starting disk cleanup on drive $Drive"
+            Write-ModuleLog -Message "Starting disk cleanup on drive $Drive" -ModuleName 'DiskCleanup'
 
             # 1. Clean Windows Temp folders
             $TempPaths = @(
@@ -75,7 +70,7 @@ function Invoke-DiskCleanup {
 
             foreach ($Path in $TempPaths) {
                 if (Test-Path $Path) {
-                    Write-CleanupLog "Cleaning temporary files in: $Path"
+                    Write-ModuleLog -Message "Cleaning temporary files in: $Path" -ModuleName 'DiskCleanup'
                     Get-ChildItem -Path $Path -File -Recurse -ErrorAction SilentlyContinue |
                     Where-Object { -not $_.PSIsContainer } |
                     Remove-Item -Force -ErrorAction SilentlyContinue
@@ -86,7 +81,7 @@ function Invoke-DiskCleanup {
             if (-not $SkipDownloads) {
                 $DownloadsPath = [Environment]::GetFolderPath('UserProfile') + '\Downloads'
                 if ((Test-Path $DownloadsPath) -and ($Force -or $PSCmdlet.ShouldProcess($DownloadsPath, "Clear Downloads folder"))) {
-                    Write-CleanupLog "Cleaning Downloads folder"
+                    Write-ModuleLog -Message "Cleaning Downloads folder" -ModuleName 'DiskCleanup'
                     Get-ChildItem -Path $DownloadsPath -Recurse -ErrorAction SilentlyContinue |
                     Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
                 }
@@ -94,24 +89,24 @@ function Invoke-DiskCleanup {
 
             # 3. Empty Recycle Bin
             if ($Force -or $PSCmdlet.ShouldProcess("Recycle Bin", "Empty")) {
-                Write-CleanupLog "Emptying Recycle Bin"
+                Write-ModuleLog -Message "Emptying Recycle Bin" -ModuleName 'DiskCleanup'
                 Clear-RecycleBin -Force -ErrorAction SilentlyContinue
             }
 
             # 4. Run Windows Disk Cleanup utility
             $CleanMgr = Join-Path $env:SystemRoot "System32\cleanmgr.exe"
             if (Test-Path $CleanMgr) {
-                Write-CleanupLog "Running Windows Disk Cleanup"
+                Write-ModuleLog -Message "Running Windows Disk Cleanup" -ModuleName 'DiskCleanup'
                 Start-Process -FilePath $CleanMgr -ArgumentList "/sagerun:1 /d $Drive" -Wait -NoNewWindow
             }
 
             # 5. Clean Windows Update files
-            Write-CleanupLog "Cleaning Windows Update files"
+            Write-ModuleLog -Message "Cleaning Windows Update files" -ModuleName 'DiskCleanup'
             Start-Process -FilePath "dism.exe" -ArgumentList "/online /cleanup-image /startcomponentcleanup" -Wait -NoNewWindow
 
             # Calculate space freed
             $FinalSpace = (Get-PSDrive -Name $Drive[0]).Free
-            Write-CleanupLog "Final free space: $([math]::Round($FinalSpace/1GB, 2)) GB"
+            Write-ModuleLog -Message "Final free space: $([math]::Round($FinalSpace/1GB, 2)) GB" -ModuleName 'DiskCleanup'
             
             $SpaceFreed = $FinalSpace - $InitialSpace
             $SpaceFreedGB = [math]::Round($SpaceFreed/1GB, 2)
@@ -125,20 +120,23 @@ Cleanup Summary for Drive $Drive
 Initial Free Space: $([math]::Round($InitialSpace/1GB, 2)) GB
 Final Free Space: $([math]::Round($FinalSpace/1GB, 2)) GB
 Space Freed: $SpaceFreedDisplay GB
-Log File: $LogFile
 "@
-            Write-CleanupLog $Summary
+            Write-ModuleLog -Message $Summary -ModuleName 'DiskCleanup'
             Write-Host $Summary
+
+            # Complete module operation successfully
+            Stop-ModuleOperation -ModuleName 'DiskCleanup' -StartTime $operation.StartTime -Success $true
         }
         catch {
             $ErrorMessage = "Error during disk cleanup: $_"
-            Write-CleanupLog $ErrorMessage
-            Write-Error $ErrorMessage
+            Write-ModuleLog -Message $ErrorMessage -Severity 'Error' -ModuleName 'DiskCleanup'
+            Stop-ModuleOperation -ModuleName 'DiskCleanup' -StartTime $operation.StartTime -Success $false -ErrorMessage $_.Exception.Message
+            throw
         }
     }
 
     end {
-        Write-CleanupLog "Disk cleanup completed"
+        Write-ModuleLog -Message "Disk cleanup completed" -ModuleName 'DiskCleanup'
     }
 }
 

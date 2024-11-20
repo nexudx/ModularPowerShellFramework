@@ -1,3 +1,6 @@
+# Import common module
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) "Common\Common.psm1")
+
 <#
 .SYNOPSIS
     Advanced system performance optimization and monitoring.
@@ -66,20 +69,10 @@ function Invoke-PerformanceOptimization {
             $VerbosePreference = 'Continue'
         }
 
-        # Create module directory if it doesn't exist
-        $ModuleDir = Join-Path $PSScriptRoot "Logs"
-        if (-not (Test-Path $ModuleDir)) {
-            New-Item -ItemType Directory -Path $ModuleDir | Out-Null
-        }
-
-        # Initialize log file
-        $LogFile = Join-Path $ModuleDir "PerformanceOptimization_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-
-        function Write-Log {
-            param([string]$Message)
-            $LogMessage = "[$(Get-Date)] - $Message"
-            $LogMessage | Add-Content -Path $LogFile
-            Write-Verbose $Message
+        # Initialize module operation
+        $operation = Start-ModuleOperation -ModuleName 'PerformanceOptimization'
+        if (-not $operation.Success) {
+            throw "Failed to initialize PerformanceOptimization operation"
         }
 
         # List of protected system processes
@@ -91,7 +84,7 @@ function Invoke-PerformanceOptimization {
         # Performance optimization functions
         function Optimize-CPU {
             try {
-                Write-Log "Starting CPU optimization..."
+                Write-ModuleLog -Message "Starting CPU optimization..." -ModuleName 'PerformanceOptimization'
                 
                 # Get current CPU-intensive processes
                 $processes = Get-Process | Where-Object {
@@ -115,14 +108,14 @@ function Invoke-PerformanceOptimization {
                         }
                     }
                     catch {
-                        Write-Log "Skipping process $($process.ProcessName): $_"
+                        Write-ModuleLog -Message "Skipping process $($process.ProcessName): $_" -ModuleName 'PerformanceOptimization'
                     }
                 }
 
                 return $result
             }
             catch {
-                Write-Log "Error in CPU optimization: $_"
+                Write-ModuleLog -Message "Error in CPU optimization: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 return $null
             }
         }
@@ -141,7 +134,7 @@ function Invoke-PerformanceOptimization {
 
         function Optimize-Memory {
             try {
-                Write-Log "Starting memory optimization..."
+                Write-ModuleLog -Message "Starting memory optimization..." -ModuleName 'PerformanceOptimization'
                 
                 $result = @{
                     ProcessesOptimized = 0
@@ -165,7 +158,7 @@ function Invoke-PerformanceOptimization {
                         }
                     }
                     catch {
-                        Write-Log "Skipping process memory $($process.ProcessName): $_"
+                        Write-ModuleLog -Message "Skipping process memory $($process.ProcessName): $_" -ModuleName 'PerformanceOptimization'
                     }
                 }
 
@@ -176,20 +169,20 @@ function Invoke-PerformanceOptimization {
                     $result.Actions += "Cleared system memory cache"
                 }
                 catch {
-                    Write-Log "Error clearing system cache: $_"
+                    Write-ModuleLog -Message "Error clearing system cache: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 }
 
                 return $result
             }
             catch {
-                Write-Log "Error in memory optimization: $_"
+                Write-ModuleLog -Message "Error in memory optimization: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 return $null
             }
         }
 
         function Optimize-Network {
             try {
-                Write-Log "Starting network optimization..."
+                Write-ModuleLog -Message "Starting network optimization..." -ModuleName 'PerformanceOptimization'
                 
                 $result = @{
                     OptimizationsApplied = 0
@@ -205,7 +198,7 @@ function Invoke-PerformanceOptimization {
                         $result.Actions += "Enabled TCP Window Auto-Tuning"
                     }
                     catch {
-                        Write-Log "Error setting TCP auto-tuning: $_"
+                        Write-ModuleLog -Message "Error setting TCP auto-tuning: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                     }
 
                     try {
@@ -215,21 +208,21 @@ function Invoke-PerformanceOptimization {
                         $result.Actions += "Cleared DNS cache"
                     }
                     catch {
-                        Write-Log "Error clearing DNS cache: $_"
+                        Write-ModuleLog -Message "Error clearing DNS cache: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                     }
                 }
 
                 return $result
             }
             catch {
-                Write-Log "Error in network optimization: $_"
+                Write-ModuleLog -Message "Error in network optimization: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 return $null
             }
         }
 
         function Optimize-Services {
             try {
-                Write-Log "Starting services optimization..."
+                Write-ModuleLog -Message "Starting services optimization..." -ModuleName 'PerformanceOptimization'
                 
                 $result = @{
                     ServicesOptimized = 0
@@ -253,21 +246,21 @@ function Invoke-PerformanceOptimization {
                         }
                     }
                     catch {
-                        Write-Log "Error optimizing service $($service.Name): $_"
+                        Write-ModuleLog -Message "Error optimizing service $($service.Name): $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                     }
                 }
 
                 return $result
             }
             catch {
-                Write-Log "Error in services optimization: $_"
+                Write-ModuleLog -Message "Error in services optimization: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 return $null
             }
         }
 
         function Optimize-Startup {
             try {
-                Write-Log "Starting startup optimization..."
+                Write-ModuleLog -Message "Starting startup optimization..." -ModuleName 'PerformanceOptimization'
                 
                 $result = @{
                     ItemsOptimized = 0
@@ -283,7 +276,7 @@ function Invoke-PerformanceOptimization {
                         foreach ($item in $items.PSObject.Properties) {
                             if ($item.Name -notin @("PSPath", "PSParentPath", "PSChildName", "PSProvider")) {
                                 # Backup before removing
-                                $backupPath = Join-Path $ModuleDir "StartupBackup_$(Get-Date -Format 'yyyyMMdd').reg"
+                                $backupPath = Join-Path $operation.LogDirectory "StartupBackup_$(Get-Date -Format 'yyyyMMdd').reg"
                                 $null = reg export $startupPath $backupPath /y
                                 
                                 # Remove non-essential startup items
@@ -295,13 +288,13 @@ function Invoke-PerformanceOptimization {
                     }
                 }
                 catch {
-                    Write-Log "Error processing startup path $startupPath`: $_"
+                    Write-ModuleLog -Message "Error processing startup path $startupPath`: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 }
 
                 return $result
             }
             catch {
-                Write-Log "Error in startup optimization: $_"
+                Write-ModuleLog -Message "Error in startup optimization: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
                 return $null
             }
         }
@@ -309,14 +302,14 @@ function Invoke-PerformanceOptimization {
 
     process {
         try {
-            Write-Log "Starting performance optimization..."
+            Write-ModuleLog -Message "Starting performance optimization..." -ModuleName 'PerformanceOptimization'
             
             # Initialize results
             $results = @{}
             
             # Process each optimization area
             foreach ($area in $Areas) {
-                Write-Log "Processing $area optimization..."
+                Write-ModuleLog -Message "Processing $area optimization..." -ModuleName 'PerformanceOptimization'
                 Write-Host "`nOptimizing $area..." -ForegroundColor Cyan
                 
                 switch ($area) {
@@ -363,13 +356,15 @@ function Invoke-PerformanceOptimization {
         }
         catch {
             $errorMessage = "Critical error during performance optimization: $_"
-            Write-Log $errorMessage
+            Write-ModuleLog -Message $errorMessage -Severity 'Error' -ModuleName 'PerformanceOptimization'
             Write-Error $errorMessage
         }
     }
 
     end {
-        Write-Host "`nPerformance optimization completed. Log file: $LogFile" -ForegroundColor Green
+        # Complete module operation
+        Stop-ModuleOperation -ModuleName 'PerformanceOptimization' -StartTime $operation.StartTime -Success $true
+        Write-Host "`nPerformance optimization completed. Check logs for details." -ForegroundColor Green
     }
 }
 
@@ -378,6 +373,8 @@ function Get-SystemPerformanceMetrics {
     param()
 
     try {
+        Write-ModuleLog -Message "Getting system performance metrics..." -ModuleName 'PerformanceOptimization'
+
         $metrics = @{
             CPU = @{
                 TopProcesses = Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 Name, CPU, WorkingSet
@@ -423,9 +420,11 @@ function Get-SystemPerformanceMetrics {
             Write-Host "- $($adapter.Name): $($adapter.LinkSpeed)"
         }
 
+        Write-ModuleLog -Message "Successfully retrieved system performance metrics" -ModuleName 'PerformanceOptimization'
         return $metrics
     }
     catch {
+        Write-ModuleLog -Message "Error getting system performance metrics: $_" -Severity 'Error' -ModuleName 'PerformanceOptimization'
         Write-Error "Error getting system performance metrics: $_"
         return $null
     }

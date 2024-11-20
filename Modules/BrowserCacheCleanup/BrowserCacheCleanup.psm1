@@ -1,3 +1,6 @@
+# Import common module
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) "Common\Common.psm1")
+
 <#
 .SYNOPSIS
     Enhanced browser cache cleanup with parallel processing and extended browser support.
@@ -32,37 +35,6 @@
     Requires Administrator privileges for optimal performance.
 #>
 
-# Define module-wide variables
-$script:ModuleRoot = $PSScriptRoot
-$script:ModuleLogDir = Join-Path $ModuleRoot "Logs"
-$script:CurrentLogFile = $null
-
-# Define module-wide functions
-function Write-ModuleLog {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-        [string]$Level = "Info"
-    )
-    
-    if (-not $script:CurrentLogFile) {
-        if (-not (Test-Path $script:ModuleLogDir)) {
-            New-Item -ItemType Directory -Path $script:ModuleLogDir -Force | Out-Null
-        }
-        $script:CurrentLogFile = Join-Path $script:ModuleLogDir "BrowserCacheCleanup_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-    }
-
-    $logMessage = "[$Level][$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
-    Add-Content -Path $script:CurrentLogFile -Value $logMessage
-    
-    switch ($Level) {
-        "Error" { Write-Error $Message }
-        "Warning" { Write-Warning $Message }
-        "Verbose" { Write-Verbose $Message }
-        default { Write-Verbose $Message }
-    }
-}
-
 function Get-BrowserProfiles {
     param (
         [Parameter(Mandatory = $true)]
@@ -75,10 +47,10 @@ function Get-BrowserProfiles {
         $profiles = @()
         $baseProfilePath = $BrowserConfig.BaseProfilePath
         
-        Write-ModuleLog "Checking profiles in: $baseProfilePath" -Level "Verbose"
+        Write-ModuleLog -Message "Checking profiles in: $baseProfilePath" -ModuleName 'BrowserCacheCleanup'
         
         if (-not (Test-Path $baseProfilePath)) {
-            Write-ModuleLog "$BrowserName base profile path not found" -Level "Verbose"
+            Write-ModuleLog -Message "$BrowserName base profile path not found" -ModuleName 'BrowserCacheCleanup'
             return $profiles
         }
 
@@ -145,11 +117,11 @@ function Get-BrowserProfiles {
             }
         }
 
-        Write-ModuleLog "Found $($profiles.Count) cache locations for $BrowserName" -Level "Verbose"
+        Write-ModuleLog -Message "Found $($profiles.Count) cache locations for $BrowserName" -ModuleName 'BrowserCacheCleanup'
         return $profiles
     }
     catch {
-        Write-ModuleLog "Error getting profiles for $BrowserName`: $_" -Level "Warning"
+        Write-ModuleLog -Message "Error getting profiles for $BrowserName`: $_" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
         return @()
     }
 }
@@ -167,7 +139,7 @@ function Stop-BrowserProcesses {
             $processes = Get-Process -Name $procName -ErrorAction SilentlyContinue
             
             if ($processes) {
-                Write-ModuleLog "Attempting to stop $procName processes..." -Level "Verbose"
+                Write-ModuleLog -Message "Attempting to stop $procName processes..." -ModuleName 'BrowserCacheCleanup'
                 
                 # Try graceful shutdown first
                 $processes | ForEach-Object { 
@@ -189,11 +161,11 @@ function Stop-BrowserProcesses {
                 
                 # Final check
                 if (Get-Process -Name $procName -ErrorAction SilentlyContinue) {
-                    Write-ModuleLog "Failed to stop all $procName processes" -Level "Warning"
+                    Write-ModuleLog -Message "Failed to stop all $procName processes" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
                     $allStopped = $false
                 }
                 else {
-                    Write-ModuleLog "Successfully stopped all $procName processes" -Level "Verbose"
+                    Write-ModuleLog -Message "Successfully stopped all $procName processes" -ModuleName 'BrowserCacheCleanup'
                 }
             }
         }
@@ -203,7 +175,7 @@ function Stop-BrowserProcesses {
         return $allStopped
     }
     catch {
-        Write-ModuleLog "Error stopping browser processes: $_" -Level "Warning"
+        Write-ModuleLog -Message "Error stopping browser processes: $_" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
         return $false
     }
 }
@@ -230,17 +202,17 @@ function Get-BrowserCacheSize {
                     }
                     catch {
                         $errorCount++
-                        Write-ModuleLog "Error accessing file $($_.FullName): $_" -Level "Warning"
+                        Write-ModuleLog -Message "Error accessing file $($_.FullName): $_" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
                     }
                 }
             
-            Write-ModuleLog "Cache stats for $CachePath`: Files: $fileCount, Errors: $errorCount" -Level "Verbose"
+            Write-ModuleLog -Message "Cache stats for $CachePath`: Files: $fileCount, Errors: $errorCount" -ModuleName 'BrowserCacheCleanup'
             return [math]::Round($size/1GB, 2)
         }
         return 0
     }
     catch {
-        Write-ModuleLog "Error calculating cache size for $CachePath`: $_" -Level "Warning"
+        Write-ModuleLog -Message "Error calculating cache size for $CachePath`: $_" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
         return 0
     }
 }
@@ -260,12 +232,12 @@ function Clear-BrowserCache {
     
     try {
         if (Test-Path $CachePath) {
-            Write-ModuleLog "Processing $BrowserName cache: $ProfileName\$CacheType" -Level "Verbose"
+            Write-ModuleLog -Message "Processing $BrowserName cache: $ProfileName\$CacheType" -ModuleName 'BrowserCacheCleanup'
             
             $initialSize = Get-BrowserCacheSize -CachePath $CachePath
             
             if ($initialSize -eq 0) {
-                Write-ModuleLog "Cache is empty: $CachePath" -Level "Verbose"
+                Write-ModuleLog -Message "Cache is empty: $CachePath" -ModuleName 'BrowserCacheCleanup'
                 return @{
                     Success = $true
                     InitialSize = 0
@@ -304,7 +276,7 @@ function Clear-BrowserCache {
                         }
                         catch {
                             $errorCount++
-                            Write-ModuleLog "Could not remove or move $($_.FullName): $_" -Level "Warning"
+                            Write-ModuleLog -Message "Could not remove or move $($_.FullName): $_" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
                         }
                     }
                 }
@@ -319,7 +291,7 @@ function Clear-BrowserCache {
             $finalSize = Get-BrowserCacheSize -CachePath $CachePath
             $freedSpace = $initialSize - $finalSize
             
-            Write-ModuleLog "Cleared $BrowserName $ProfileName\$CacheType`: $freedSpace GB freed ($filesProcessed files processed, $errorCount errors)" -Level "Verbose"
+            Write-ModuleLog -Message "Cleared $BrowserName $ProfileName\$CacheType`: $freedSpace GB freed ($filesProcessed files processed, $errorCount errors)" -ModuleName 'BrowserCacheCleanup'
             return @{
                 Success = $true
                 InitialSize = $initialSize
@@ -339,7 +311,7 @@ function Clear-BrowserCache {
         }
     }
     catch {
-        Write-ModuleLog "Error clearing $BrowserName cache: $_" -Level "Error"
+        Write-ModuleLog -Message "Error clearing $BrowserName cache: $_" -Severity 'Error' -ModuleName 'BrowserCacheCleanup'
         return @{
             Success = $false
             InitialSize = 0
@@ -366,16 +338,22 @@ function Invoke-BrowserCacheCleanup {
     )
 
     try {
+        # Initialize module operation
+        $operation = Start-ModuleOperation -ModuleName 'BrowserCacheCleanup'
+        if (-not $operation.Success) {
+            throw "Failed to initialize BrowserCacheCleanup operation"
+        }
+
         if ($VerboseOutput) {
             $VerbosePreference = 'Continue'
         }
 
-        Write-ModuleLog "Starting browser cache cleanup" -Level "Verbose"
+        Write-ModuleLog -Message "Starting browser cache cleanup" -ModuleName 'BrowserCacheCleanup'
 
         # Check for admin privileges
         $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
         if (-not $isAdmin) {
-            Write-ModuleLog "Warning: Running without administrator privileges. Some operations may fail." -Level "Warning"
+            Write-ModuleLog -Message "Warning: Running without administrator privileges. Some operations may fail." -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
         }
 
         # Browser configurations with process names and base profile paths
@@ -414,7 +392,7 @@ function Invoke-BrowserCacheCleanup {
         $totalErrors = 0
 
         foreach ($browser in $browsers.GetEnumerator()) {
-            Write-ModuleLog "Processing $($browser.Key)..." -Level "Verbose"
+            Write-ModuleLog -Message "Processing $($browser.Key)..." -ModuleName 'BrowserCacheCleanup'
             
             # Get all cache paths for this browser
             $cacheLocations = Get-BrowserProfiles -BrowserName $browser.Key -BrowserConfig $browser.Value
@@ -425,7 +403,7 @@ function Invoke-BrowserCacheCleanup {
                     $allProcesses = $browser.Value.ProcessNames + $browser.Value.BackgroundProcesses
                     $stopped = Stop-BrowserProcesses -ProcessNames $allProcesses
                     if (-not $stopped) {
-                        Write-ModuleLog "Unable to stop all $($browser.Key) processes, cleanup might be incomplete" -Level "Warning"
+                        Write-ModuleLog -Message "Unable to stop all $($browser.Key) processes, cleanup might be incomplete" -Severity 'Warning' -ModuleName 'BrowserCacheCleanup'
                     }
                 }
 
@@ -478,16 +456,16 @@ function Invoke-BrowserCacheCleanup {
                         $message += " with $($browserResults.ErrorCount) errors"
                     }
                     Write-Host $message
-                    Write-ModuleLog $message -Level "Verbose"
+                    Write-ModuleLog -Message $message -ModuleName 'BrowserCacheCleanup'
                 }
                 else {
                     $message = "$($browser.Key) cleanup failed: $($browserResults.Error)"
                     Write-Host $message -ForegroundColor Red
-                    Write-ModuleLog $message -Level "Error"
+                    Write-ModuleLog -Message $message -Severity 'Error' -ModuleName 'BrowserCacheCleanup'
                 }
             }
             else {
-                Write-ModuleLog "$($browser.Key) not installed or no cache found" -Level "Verbose"
+                Write-ModuleLog -Message "$($browser.Key) not installed or no cache found" -ModuleName 'BrowserCacheCleanup'
             }
         }
 
@@ -500,13 +478,17 @@ Cache cleanup completed:
 - Browsers processed: $($results.Keys.Count)
 - Total errors: $totalErrors
 "@
-        Write-ModuleLog $summary
+        Write-ModuleLog -Message $summary -ModuleName 'BrowserCacheCleanup'
         Write-Host "`n$summary" -ForegroundColor Green
+
+        # Complete module operation
+        Stop-ModuleOperation -ModuleName 'BrowserCacheCleanup' -StartTime $operation.StartTime -Success $true
 
         return $results
     }
     catch {
-        Write-ModuleLog "Critical error during browser cache cleanup: $_" -Level "Error"
+        Write-ModuleLog -Message "Critical error during browser cache cleanup: $_" -Severity 'Error' -ModuleName 'BrowserCacheCleanup'
+        Stop-ModuleOperation -ModuleName 'BrowserCacheCleanup' -StartTime $operation.StartTime -Success $false -ErrorMessage $_.Exception.Message
         throw
     }
 }

@@ -1,6 +1,5 @@
-# Module-level variables
-$script:ModuleRoot = $PSScriptRoot
-$script:LogMutex = New-Object System.Threading.Mutex($false, "GlobalTempFileCleanupLogMutex")
+# Import common module
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) "Common\Common.psm1")
 
 # Define cleanup locations
 $script:TempLocations = @{
@@ -38,39 +37,6 @@ $script:TempLocations = @{
         Path = "$env:windir\Logs\CBS"
         Description = "Windows component store logs"
         Pattern = "*\CBS"
-    }
-}
-
-function Write-CleanupLog {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-        
-        [Parameter(Mandatory = $false)]
-        [ValidateSet('Information', 'Warning', 'Error')]
-        [string]$Severity = 'Information'
-    )
-    
-    $LogDir = Join-Path $script:ModuleRoot "Logs"
-    if (-not (Test-Path $LogDir)) {
-        New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
-    }
-
-    $LogFile = Join-Path $LogDir "TempFileCleanup_$(Get-Date -Format 'yyyyMMdd').log"
-    $LogMessage = "[$(Get-Date)] [$Severity] - $Message"
-    
-    $script:LogMutex.WaitOne() | Out-Null
-    try {
-        Add-Content -Path $LogFile -Value $LogMessage
-        
-        switch ($Severity) {
-            'Warning' { Write-Warning $Message }
-            'Error' { Write-Error $Message }
-            default { Write-Verbose $Message }
-        }
-    }
-    finally {
-        $script:LogMutex.ReleaseMutex()
     }
 }
 
@@ -180,7 +146,13 @@ function Invoke-TempFileCleanup {
     )
 
     try {
-        Write-CleanupLog "Starting temporary file cleanup..."
+        # Initialize module operation
+        $operation = Start-ModuleOperation -ModuleName 'TempFileCleanup'
+        if (-not $operation.Success) {
+            throw "Failed to initialize TempFileCleanup operation"
+        }
+
+        Write-ModuleLog -Message "Starting temporary file cleanup..." -ModuleName 'TempFileCleanup'
         
         $results = @{}
         $totalSaved = 0
@@ -189,7 +161,7 @@ function Invoke-TempFileCleanup {
         $totalErrors = 0
 
         foreach ($location in $script:TempLocations.GetEnumerator()) {
-            Write-CleanupLog "Processing $($location.Key)..."
+            Write-ModuleLog -Message "Processing $($location.Key)..." -ModuleName 'TempFileCleanup'
             
             $result = Remove-TempFilesInternal `
                 -Path $location.Value.Path `
@@ -206,12 +178,12 @@ Files Deleted: $($result.FilesDeleted)
 Size Deleted: $([math]::Round($result.SizeDeleted/1MB, 2)) MB
 Locked Files: $($result.LockedFiles)
 "@
-            Write-CleanupLog $summary
+            Write-ModuleLog -Message $summary -ModuleName 'TempFileCleanup'
             Write-Host $summary
 
             if ($result.Errors.Count -gt 0) {
                 foreach ($error in $result.Errors) {
-                    Write-CleanupLog "ERROR: $error" -Severity 'Warning'
+                    Write-ModuleLog -Message "ERROR: $error" -Severity 'Warning' -ModuleName 'TempFileCleanup'
                 }
             }
 
@@ -229,11 +201,15 @@ Total Space Saved: $([math]::Round($totalSaved/1MB, 2)) MB
 Total Locked Files: $totalLocked
 Total Errors: $totalErrors
 "@
-        Write-CleanupLog $finalSummary
+        Write-ModuleLog -Message $finalSummary -ModuleName 'TempFileCleanup'
         Write-Host $finalSummary
+
+        # Complete module operation
+        Stop-ModuleOperation -ModuleName 'TempFileCleanup' -StartTime $operation.StartTime -Success $true
     }
     catch {
-        Write-CleanupLog "Critical error during cleanup: $_" -Severity 'Error'
+        Write-ModuleLog -Message "Critical error during cleanup: $_" -Severity 'Error' -ModuleName 'TempFileCleanup'
+        Stop-ModuleOperation -ModuleName 'TempFileCleanup' -StartTime $operation.StartTime -Success $false -ErrorMessage $_.Exception.Message
         throw
     }
 }
