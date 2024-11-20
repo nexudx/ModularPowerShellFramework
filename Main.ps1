@@ -1,13 +1,15 @@
 <#
 .SYNOPSIS
-    Loads and executes PowerShell modules from a specified directory with a module selection prompt at startup.
+    Enhanced PowerShell module management framework with advanced features.
 
 .DESCRIPTION
-    This script provides a framework for loading and executing PowerShell modules.
-    Modules are loaded from the 'Modules' subdirectory relative to the script's location.
-    At startup, a selection prompt is displayed, allowing the user to choose a module.
-    After executing a module, the latest log in the module directory is displayed in the console.
-    Log rotation is always performed after a module creates a new log.
+    This optimized framework provides comprehensive module management:
+    - Module selection and execution
+    - Parameter validation and parsing
+    - Log and report management
+    - Module health verification
+    - Execution summary
+    - Error handling
 
 .PARAMETER ModuleName
     The name of the module to load (without the .psm1 extension).
@@ -18,16 +20,14 @@
 
 .EXAMPLE
     .\Main.ps1
-
-    Starts the script and displays the module selection prompt.
+    Starts the framework and displays the module selection prompt.
 
 .EXAMPLE
-    .\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-Verbose")
-
-    Loads the 'DiskCheck' module and executes it with the parameter -Verbose.
+    .\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-Verbose", "-GenerateReport")
+    Loads the DiskCheck module with verbose output and report generation.
 
 .NOTES
-    Parts of this script require administrator privileges. Displaying the log and performing log rotation after module processing do not require elevated rights.
+    Requires Administrator privileges for full functionality.
 #>
 [CmdletBinding()]
 param(
@@ -40,25 +40,26 @@ param(
 
 # Global variables
 $ModulesPath = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) "Modules"
+$FrameworkLogDir = Join-Path $PSScriptRoot "Logs"
 
-function Show-LatestModuleLog {
+# Create framework log directory if it doesn't exist
+if (-not (Test-Path $FrameworkLogDir)) {
+    New-Item -ItemType Directory -Path $FrameworkLogDir | Out-Null
+}
+
+$FrameworkLogFile = Join-Path $FrameworkLogDir "Framework_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+
+function Write-FrameworkLog {
+    param([string]$Message)
+    $LogMessage = "[$(Get-Date)] - $Message"
+    $LogMessage | Add-Content -Path $FrameworkLogFile
+    Write-Verbose $Message
+}
+
+function Test-ModuleHealth {
     <#
     .SYNOPSIS
-        Displays the latest log of a module in the console.
-
-    .DESCRIPTION
-        This function searches the module directory for the most recent log file and outputs its content to the console.
-
-    .PARAMETER ModuleName
-        The name of the module whose log should be displayed.
-
-    .EXAMPLE
-        Show-LatestModuleLog -ModuleName "DiskCleanup"
-
-        Displays the latest log of the 'DiskCleanup' module.
-
-    .NOTES
-        The function assumes that log files have the '.log' extension and are stored in the module directory.
+        Verifies module health and dependencies.
     #>
     [CmdletBinding()]
     param(
@@ -67,51 +68,80 @@ function Show-LatestModuleLog {
     )
 
     try {
-        $ModuleDirectory = Join-Path $ModulesPath $ModuleName
+        Write-FrameworkLog "Verifying module health: $ModuleName"
+        
+        $modulePath = Join-Path $ModulesPath $ModuleName
+        $psd1Path = Join-Path $modulePath "$ModuleName.psd1"
+        $psm1Path = Join-Path $modulePath "$ModuleName.psm1"
 
-        if (-not (Test-Path $ModuleDirectory)) {
-            Write-Warning "Module directory not found: $ModuleDirectory"
-            return
+        # Check module files
+        if (-not (Test-Path $psd1Path) -or -not (Test-Path $psm1Path)) {
+            throw "Module files missing or incomplete"
         }
 
-        $LatestLog = Get-ChildItem -Path $ModuleDirectory -Filter '*.log' |
+        # Check module manifest
+        $manifest = Import-PowerShellDataFile -Path $psd1Path
+        
+        # Verify required directories
+        $logDir = Join-Path $modulePath "Logs"
+        if (-not (Test-Path $logDir)) {
+            New-Item -ItemType Directory -Path $logDir | Out-Null
+        }
+
+        return $true
+    }
+    catch {
+        Write-FrameworkLog "Module health check failed: $_"
+        return $false
+    }
+}
+
+function Show-ModuleOutput {
+    <#
+    .SYNOPSIS
+        Displays module execution output including logs and reports.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ModuleName
+    )
+
+    try {
+        $moduleLogDir = Join-Path $ModulesPath "$ModuleName\Logs"
+        
+        # Get latest log file
+        $latestLog = Get-ChildItem -Path $moduleLogDir -Filter "*.log" |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
 
-        if ($LatestLog) {
-            Write-Host "Content of the latest log for module '$ModuleName':" -ForegroundColor Cyan
-            Get-Content -Path $LatestLog.FullName
+        if ($latestLog) {
+            Write-Host "`nModule Log Output:" -ForegroundColor Cyan
+            Get-Content -Path $latestLog.FullName
         }
-        else {
-            Write-Warning "No log files found in the module directory for module '$ModuleName'."
+
+        # Check for HTML report
+        $latestReport = Get-ChildItem -Path $moduleLogDir -Filter "*.html" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+        if ($latestReport) {
+            Write-Host "`nHTML report generated: $($latestReport.FullName)" -ForegroundColor Green
+            # Optionally open the report
+            if ($PSCmdlet.ShouldProcess("Open HTML report?")) {
+                Start-Process $latestReport.FullName
+            }
         }
     }
     catch {
-        Write-Error "Error displaying the latest log: $_"
+        Write-Error "Error displaying module output: $_"
     }
 }
 
 function Invoke-ModuleExecution {
     <#
     .SYNOPSIS
-        Executes module processing that requires administrator privileges.
-
-    .DESCRIPTION
-        This function loads the selected module and executes the corresponding Invoke function.
-
-    .PARAMETER ModuleName
-        The name of the module to load.
-
-    .PARAMETER ModuleParameters
-        Additional parameters for the module's Invoke function.
-
-    .EXAMPLE
-        Invoke-ModuleExecution -ModuleName "DiskCheck" -ModuleParameters @("-Verbose")
-
-        Executes the 'DiskCheck' module with the parameter -Verbose.
-
-    .NOTES
-        This function requires administrator privileges.
+        Executes module with enhanced parameter handling and monitoring.
     #>
     [CmdletBinding()]
     param(
@@ -123,140 +153,153 @@ function Invoke-ModuleExecution {
     )
 
     try {
+        Write-FrameworkLog "Starting module execution: $ModuleName"
+
         # Update PSModulePath
         $env:PSModulePath = "$ModulesPath;$env:PSModulePath"
 
         # Import module
-        Import-Module $ModuleName -ErrorAction Stop
+        Import-Module $ModuleName -Force -ErrorAction Stop
 
-        # Dynamically construct the command with parameters
-        $Command = "Invoke-$ModuleName"
-        $ParamList = @{}
-
+        # Parse parameters into hashtable
+        $paramList = @{}
         if ($ModuleParameters) {
-            # Parse module parameters
             for ($i = 0; $i -lt $ModuleParameters.Count; $i++) {
                 $param = $ModuleParameters[$i]
                 if ($param -match '^-(.+)$') {
-                    $ParamName = $matches[1]
-                    $ParamValue = $true
-                    # Check if a value for the parameter was provided
+                    $paramName = $matches[1]
+                    $paramValue = $true
                     if ($i + 1 -lt $ModuleParameters.Count -and -not ($ModuleParameters[$i + 1] -match '^-')) {
-                        $ParamValue = $ModuleParameters[$i + 1]
+                        $paramValue = $ModuleParameters[$i + 1]
                         $i++
                     }
-                    $ParamList[$ParamName] = $ParamValue
+                    $paramList[$paramName] = $paramValue
                 }
             }
         }
 
-        # Execute module function call with parameters
-        & $Command @ParamList
+        # Start execution timer
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        # Execute module
+        $Command = "Invoke-$ModuleName"
+        & $Command @paramList
+
+        $stopwatch.Stop()
+        Write-FrameworkLog "Module execution completed in $($stopwatch.Elapsed.TotalSeconds) seconds"
+
+        return $true
     }
     catch {
-        Write-Error "An error occurred: $_"
+        Write-FrameworkLog "Module execution failed: $_"
+        Write-Error "Module execution failed: $_"
+        return $false
     }
 }
 
 function Rotate-ModuleLogs {
     <#
     .SYNOPSIS
-        Performs log rotation for a module.
-
-    .DESCRIPTION
-        Retain only the latest three log files for the specified module.
-
-    .PARAMETER ModuleName
-        The name of the module whose logs should be rotated.
-
-    .EXAMPLE
-        Rotate-ModuleLogs -ModuleName "DiskCleanup"
-
-        Performs log rotation for the 'DiskCleanup' module.
-
-    .NOTES
-        This function does not require administrator privileges.
+        Enhanced log rotation with support for multiple file types.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$ModuleName
+        [string]$ModuleName,
+
+        [Parameter(Mandatory = $false)]
+        [int]$RetainCount = 3
     )
 
     try {
-        $ModuleDirectory = Join-Path $ModulesPath $ModuleName
-
-        if (-not (Test-Path $ModuleDirectory)) {
-            Write-Warning "Module directory not found: $ModuleDirectory"
+        $moduleLogDir = Join-Path $ModulesPath "$ModuleName\Logs"
+        
+        if (-not (Test-Path $moduleLogDir)) {
             return
         }
 
-        $Logs = Get-ChildItem -Path $ModuleDirectory -Filter '*.log' |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -Skip 3
+        # Rotate logs
+        foreach ($extension in @("*.log", "*.html")) {
+            $files = Get-ChildItem -Path $moduleLogDir -Filter $extension |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -Skip $RetainCount
 
-        if ($Logs) {
-            $Logs | Remove-Item -Force -ErrorAction SilentlyContinue
+            if ($files) {
+                $files | Remove-Item -Force -ErrorAction SilentlyContinue
+                Write-FrameworkLog "Rotated $($files.Count) $extension files for $ModuleName"
+            }
         }
     }
     catch {
-        Write-Error "Error during log rotation: $_"
+        Write-FrameworkLog "Error during log rotation: $_"
     }
 }
 
 # Main logic
-
 try {
-    # If no module name is specified, start module selection prompt
-    if (-not $ModuleName) {
-        # List available modules
-        $AvailableModules = Get-ChildItem -Path $ModulesPath -Directory | Select-Object -ExpandProperty Name
+    Write-FrameworkLog "Framework execution started"
 
-        if ($AvailableModules.Count -eq 0) {
-            throw "No modules found in the Modules directory."
+    # Module selection if not specified
+    if (-not $ModuleName) {
+        $availableModules = Get-ChildItem -Path $ModulesPath -Directory |
+            Where-Object { Test-ModuleHealth $_.Name } |
+            Select-Object -ExpandProperty Name
+
+        if ($availableModules.Count -eq 0) {
+            throw "No healthy modules found in the Modules directory"
         }
 
-        Write-Host "Available modules:"
-        for ($i = 0; $i -lt $AvailableModules.Count; $i++) {
-            Write-Host "[$($i + 1)] $($AvailableModules[$i])"
+        Write-Host "`nAvailable Modules:"
+        for ($i = 0; $i -lt $availableModules.Count; $i++) {
+            Write-Host "[$($i + 1)] $($availableModules[$i])"
         }
 
         do {
-            $selection = Read-Host "Please select a module by entering the corresponding number"
+            $selection = Read-Host "`nSelect module (1-$($availableModules.Count))"
             $selection = [int]$selection - 1
-        } until ($selection -ge 0 -and $selection -lt $AvailableModules.Count)
+        } until ($selection -ge 0 -and $selection -lt $availableModules.Count)
 
-        $ModuleName = $AvailableModules[$selection]
+        $ModuleName = $availableModules[$selection]
     }
 
-    # Check if running as administrator
+    # Verify module health
+    if (-not (Test-ModuleHealth $ModuleName)) {
+        throw "Module health check failed for $ModuleName"
+    }
+
+    # Check administrator privileges
     $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
     if (-not $isAdmin) {
-        Write-Warning "Executing the module requires administrator privileges. Restarting in elevated mode..."
+        Write-Warning "Elevating privileges for module execution..."
 
-        # Prepare arguments
+        # Prepare elevation arguments
         $argList = "-ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -ModuleName `"$ModuleName`""
         if ($ModuleParameters) {
             $paramStr = $ModuleParameters | ForEach-Object { "`"$_`"" } -join ' '
             $argList += " -ModuleParameters $paramStr"
         }
 
-        # Restart script in elevated session and pass parameters
+        # Restart with elevation
         Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait
     }
     else {
         # Execute module
-        Invoke-ModuleExecution -ModuleName $ModuleName -ModuleParameters $ModuleParameters
+        $success = Invoke-ModuleExecution -ModuleName $ModuleName -ModuleParameters $ModuleParameters
+
+        if ($success) {
+            # Rotate logs
+            Rotate-ModuleLogs -ModuleName $ModuleName
+
+            # Show output
+            Show-ModuleOutput -ModuleName $ModuleName
+        }
     }
-
-    # Perform log rotation after module execution
-    Rotate-ModuleLogs -ModuleName $ModuleName
-
-    # After log rotation, display the latest log
-    Show-LatestModuleLog -ModuleName $ModuleName
-
 }
 catch {
-    Write-Error "An error occurred: $_"
+    Write-FrameworkLog "Critical error: $_"
+    Write-Error "Critical error: $_"
+}
+finally {
+    Write-FrameworkLog "Framework execution completed"
 }

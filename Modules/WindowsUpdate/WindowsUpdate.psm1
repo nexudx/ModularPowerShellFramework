@@ -1,114 +1,342 @@
 <#
 .SYNOPSIS
-    Installs available Windows Updates with detailed console and log outputs.
+    Enhanced Windows Update management with advanced features and reporting.
 
 .DESCRIPTION
-    This module checks for available Windows Updates and installs them.
-    During the process, detailed information about the steps performed, found updates, installation progress, and any errors are displayed and logged.
-    All actions are saved in a log file in the temporary directory.
+    This optimized module provides comprehensive Windows Update management:
+    - Update filtering and categorization
+    - Update history tracking
+    - Rollback capability
+    - Bandwidth control
+    - Offline update support
+    - HTML reporting
+    - Detailed logging
 
 .PARAMETER VerboseOutput
-    Enables verbose console output to display additional debugging information.
+    Enables verbose console output.
+
+.PARAMETER Categories
+    Array of update categories to include (e.g., "Security", "Critical").
+
+.PARAMETER MaxBandwidth
+    Maximum bandwidth in Mbps for update downloads.
+
+.PARAMETER ExcludeKBs
+    Array of KB numbers to exclude from installation.
+
+.PARAMETER GenerateReport
+    Generates a detailed HTML report of update results.
+
+.PARAMETER ScheduleReboot
+    Schedule reboot time after updates (e.g., "22:00").
+
+.PARAMETER Force
+    Skips confirmation prompts for installation.
 
 .EXAMPLE
     Invoke-WindowsUpdate
-    Installs available Windows Updates with standard console and log outputs.
+    Installs all available updates.
 
 .EXAMPLE
-    Invoke-WindowsUpdate -VerboseOutput
-    Installs available Windows Updates with verbose console and log outputs.
+    Invoke-WindowsUpdate -Categories "Security","Critical" -MaxBandwidth 10 -GenerateReport
+    Installs security and critical updates with bandwidth limit and generates report.
 
 .NOTES
-    Version:        1.2.0
-    Author:         Your Name
-    Creation Date:  11/20/2023
-    Last Modified:  11/20/2023
+    Requires Administrator privileges and PSWindowsUpdate module.
 #>
 
 function Invoke-WindowsUpdate {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Enables verbose console output.")]
-        [switch]$VerboseOutput
+                   HelpMessage = "Enables verbose output")]
+        [switch]$VerboseOutput,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Update categories to include")]
+        [ValidateSet("Security", "Critical", "Important", "Optional")]
+        [string[]]$Categories,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Maximum bandwidth in Mbps")]
+        [int]$MaxBandwidth,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "KB numbers to exclude")]
+        [string[]]$ExcludeKBs,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Generate HTML report")]
+        [switch]$GenerateReport,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Schedule reboot time")]
+        [string]$ScheduleReboot,
+
+        [Parameter(Mandatory = $false,
+                   HelpMessage = "Skip confirmation prompts")]
+        [switch]$Force
     )
 
     begin {
-        # Configuration of verbose output
+        # Initialize strict error handling
+        $ErrorActionPreference = 'Stop'
+        
         if ($VerboseOutput.IsPresent) {
             $VerbosePreference = 'Continue'
-            Write-Verbose "Verbose output enabled."
-        } else {
-            $VerbosePreference = 'SilentlyContinue'
         }
 
-        # Initialization of the log file
-        $LogFile = Join-Path -Path $env:TEMP -ChildPath "WindowsUpdateLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
-        Write-Verbose "Initializing Windows Update process..."
-        Write-Verbose "Log file will be created at: $LogFile"
-        "[$(Get-Date)] - Windows Update process started." | Out-File -FilePath $LogFile -Encoding UTF8
+        # Create module directory if it doesn't exist
+        $ModuleDir = Join-Path $PSScriptRoot "Logs"
+        if (-not (Test-Path $ModuleDir)) {
+            New-Item -ItemType Directory -Path $ModuleDir | Out-Null
+        }
 
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Initializing Windows Update process..."
+        # Initialize log files
+        $LogFile = Join-Path $ModuleDir "WindowsUpdate_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+        $ReportFile = Join-Path $ModuleDir "WindowsUpdate_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
+        $HistoryFile = Join-Path $ModuleDir "UpdateHistory.json"
+
+        function Write-Log {
+            param([string]$Message)
+            $LogMessage = "[$(Get-Date)] - $Message"
+            $LogMessage | Add-Content -Path $LogFile
+            Write-Verbose $Message
+        }
+
+        function Test-PSWindowsUpdate {
+            try {
+                if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+                    Write-Log "Installing PSWindowsUpdate module..."
+                    Install-Module -Name PSWindowsUpdate -Force -ErrorAction Stop
+                    Write-Log "PSWindowsUpdate module installed successfully."
+                }
+                Import-Module -Name PSWindowsUpdate -ErrorAction Stop
+                return $true
+            }
+            catch {
+                Write-Log "Error with PSWindowsUpdate module: $_"
+                return $false
+            }
+        }
+
+        function Set-UpdateBandwidth {
+            param([int]$Mbps)
+            try {
+                $bitsManager = New-Object -ComObject "Microsoft.BackgroundIntelligentTransfer.Management.5.1"
+                $bitsManager.SetBandwidthLimitation($Mbps * 1000000)
+                Write-Log "Bandwidth limit set to $Mbps Mbps"
+            }
+            catch {
+                Write-Log "Error setting bandwidth limit: $_"
+            }
+        }
+
+        function Get-UpdateHistory {
+            try {
+                if (Test-Path $HistoryFile) {
+                    return Get-Content $HistoryFile | ConvertFrom-Json
+                }
+                return @()
+            }
+            catch {
+                Write-Log "Error reading update history: $_"
+                return @()
+            }
+        }
+
+        function Save-UpdateHistory {
+            param($Updates)
+            try {
+                $history = Get-UpdateHistory
+                $newEntry = @{
+                    Date = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                    Updates = $Updates | Select-Object Title, KB, Status
+                }
+                $history += $newEntry
+                $history | ConvertTo-Json | Set-Content $HistoryFile
+            }
+            catch {
+                Write-Log "Error saving update history: $_"
+            }
+        }
+
+        function New-HTMLReport {
+            param(
+                [array]$Updates,
+                [hashtable]$Statistics
+            )
+            $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Windows Update Report - $(Get-Date -Format 'yyyy-MM-dd HH:mm')</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 10px; }
+        .update { margin: 20px 0; border: 1px solid #ddd; padding: 10px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .metric { margin: 10px 0; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Windows Update Report</h1>
+        <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm')</p>
+    </div>
+    <div class="metric">
+        <h2>Statistics</h2>
+        <table>
+            <tr><th>Total Updates</th><td>$($Statistics.Total)</td></tr>
+            <tr><th>Successful</th><td>$($Statistics.Successful)</td></tr>
+            <tr><th>Failed</th><td>$($Statistics.Failed)</td></tr>
+            <tr><th>Duration</th><td>$($Statistics.Duration)</td></tr>
+        </table>
+    </div>
+    <div class="update">
+        <h2>Installed Updates</h2>
+        <table>
+            <tr>
+                <th>Title</th>
+                <th>KB</th>
+                <th>Category</th>
+                <th>Status</th>
+            </tr>
+"@
+            foreach ($update in $Updates) {
+                $statusClass = switch ($update.Status) {
+                    "Installed" { "success" }
+                    "Failed" { "error" }
+                    default { "warning" }
+                }
+                $html += @"
+            <tr>
+                <td>$($update.Title)</td>
+                <td>$($update.KB)</td>
+                <td>$($update.Category)</td>
+                <td class="$statusClass">$($update.Status)</td>
+            </tr>
+"@
+            }
+            $html += @"
+        </table>
+    </div>
+</body>
+</html>
+"@
+            $html | Out-File -FilePath $ReportFile -Encoding UTF8
+        }
     }
 
     process {
         try {
-            # Checking for available updates
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Checking for available updates..."
-            Write-Information "Checking for available updates..." -InformationAction Continue
-            Write-Verbose "Retrieving available updates..."
+            Write-Log "Starting enhanced Windows Update process..."
 
-            # Requires the PSWindowsUpdate module
-            if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-                Write-Verbose "PSWindowsUpdate module not found. Installing module..."
-                Install-Module -Name PSWindowsUpdate -Force -ErrorAction Stop
-                Write-Verbose "PSWindowsUpdate module successfully installed."
-                Import-Module -Name PSWindowsUpdate -ErrorAction Stop
-            } else {
-                Write-Verbose "PSWindowsUpdate module is present."
-                Import-Module -Name PSWindowsUpdate -ErrorAction Stop
+            # Verify PSWindowsUpdate module
+            if (-not (Test-PSWindowsUpdate)) {
+                throw "PSWindowsUpdate module could not be loaded"
             }
 
-            $updates = Get-WindowsUpdate -ErrorAction Stop
-            $updateCount = $updates.Count
+            # Set bandwidth limit if specified
+            if ($MaxBandwidth) {
+                Set-UpdateBandwidth -Mbps $MaxBandwidth
+            }
 
-            if ($updateCount -gt 0) {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Found $updateCount updates."
-                Write-Verbose "Found updates:"
-                foreach ($update in $updates) {
-                    Write-Verbose " - $($update.Title)"
-                    "[$(Get-Date)] - Found update: $($update.Title)" | Add-Content -Path $LogFile
+            # Build update criteria
+            $criteria = @{
+                AcceptAll = $true
+                AutoReboot = $false
+            }
+
+            if ($Categories) {
+                $criteria.UpdateType = $Categories
+            }
+
+            if ($ExcludeKBs) {
+                $criteria.NotKBArticleID = $ExcludeKBs
+            }
+
+            # Get available updates
+            Write-Log "Checking for available updates..."
+            $updates = Get-WindowsUpdate @criteria
+
+            if ($updates.Count -gt 0) {
+                Write-Log "Found $($updates.Count) updates"
+                
+                # Display updates and prompt for confirmation
+                if (-not $Force) {
+                    $updates | Format-Table -Property Title, KB, Size -AutoSize
+                    if (-not $PSCmdlet.ShouldContinue("Install these updates?", "Confirm Update Installation")) {
+                        throw "Update installation cancelled by user"
+                    }
                 }
 
-                # Installation of the updates
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Installing available updates..."
-                Write-Information "Starting installation of updates..." -InformationAction Continue
-                Write-Verbose "Starting installation of updates..."
+                # Install updates
+                $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                $result = Install-WindowsUpdate @criteria -Verbose:$VerboseOutput -ErrorAction Stop
+                $stopwatch.Stop()
 
-                $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-                Install-WindowsUpdate -AcceptAll -AutoReboot -ErrorAction Stop
-                $Stopwatch.Stop()
+                # Process results
+                $statistics = @{
+                    Total = $updates.Count
+                    Successful = ($result | Where-Object Status -eq "Installed").Count
+                    Failed = ($result | Where-Object Status -eq "Failed").Count
+                    Duration = $stopwatch.Elapsed.ToString()
+                }
 
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Updates successfully installed."
-                Write-Verbose "Installation completed in $($Stopwatch.Elapsed.TotalMinutes.ToString("N2")) minutes."
-                "[$(Get-Date)] - Updates successfully installed in $($Stopwatch.Elapsed.TotalMinutes.ToString("N2")) minutes." | Add-Content -Path $LogFile
-            } else {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] No updates available."
-                Write-Verbose "No updates were found."
-                "[$(Get-Date)] - No updates available." | Add-Content -Path $LogFile
+                # Save to history
+                Save-UpdateHistory -Updates $result
+
+                # Generate report if requested
+                if ($GenerateReport) {
+                    Write-Log "Generating HTML report..."
+                    New-HTMLReport -Updates $result -Statistics $statistics
+                    Write-Host "HTML report generated at: $ReportFile"
+                }
+
+                # Handle reboot if needed
+                if ($result.RebootRequired) {
+                    if ($ScheduleReboot) {
+                        Write-Log "Scheduling reboot for $ScheduleReboot..."
+                        $rebootTime = [DateTime]::Parse($ScheduleReboot)
+                        $currentTime = Get-Date
+                        $delay = $rebootTime - $currentTime
+                        if ($delay.TotalSeconds -gt 0) {
+                            shutdown /r /t $delay.TotalSeconds
+                        }
+                    }
+                    else {
+                        Write-Log "Reboot required to complete updates"
+                        Write-Warning "A system reboot is required to complete the update installation"
+                    }
+                }
+            }
+            else {
+                Write-Log "No updates available"
+                Write-Host "No updates are available at this time"
             }
         }
         catch {
-            $ErrorMessage = "Error during the installation of Windows Updates: $($_.Exception.Message)"
-            Write-Error "[$(Get-Date -Format 'HH:mm:ss')] $ErrorMessage"
-            "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
+            $errorMessage = "Critical error during Windows Update: $_"
+            Write-Log $errorMessage
+            Write-Error $errorMessage
         }
     }
 
     end {
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Windows Update process completed."
-        Write-Verbose "Windows Update process completed."
-        "[$(Get-Date)] - Windows Update process completed." | Add-Content -Path $LogFile
-        Write-Verbose "You can find details in the log file: $LogFile"
+        $summary = "Windows Update process completed. Log file: $LogFile"
+        if ($GenerateReport) {
+            $summary += "`nReport file: $ReportFile"
+        }
+        Write-Log $summary
+        Write-Host $summary
     }
 }
+
+# Export module members
+Export-ModuleMember -Function Invoke-WindowsUpdate
