@@ -1,44 +1,44 @@
 <#
 .SYNOPSIS
-    Führt eine Bereinigung von temporären Dateien durch und liefert detaillierte Ausgaben.
+    Performs a cleanup of temporary files and provides detailed outputs.
 
 .DESCRIPTION
-    Dieses Modul bereinigt temporäre Dateien von definierten Pfaden, um Speicherplatz freizugeben und die Systemleistung zu verbessern.
-    Es liefert dabei ausführliche Informationen über die Anzahl der gelöschten Dateien, den freigegebenen Speicherplatz und die Pfade, die bereinigt wurden.
+    This module cleans temporary files from defined paths to free up space and improve system performance.
+    It provides detailed information about the number of files deleted, the freed space, and the paths that were cleaned.
 
 .PARAMETER VerboseOutput
-    Schaltet die ausführliche Ausgabe ein.
+    Enables verbose output.
 
 .PARAMETER LogPath
-    Gibt den Pfad an, unter dem das Log gespeichert werden soll. Standardmäßig wird ein Log im Modulverzeichnis erstellt.
+    Specifies the path where the log should be saved. By default, a log is created in the module directory.
 
 .EXAMPLE
     Invoke-TempFileCleanup
-    Führt die temporäre Dateienbereinigung mit Standardeinstellungen durch.
+    Performs temporary file cleanup with default settings.
 
 .EXAMPLE
     Invoke-TempFileCleanup -VerboseOutput
-    Führt die Bereinigung durch und zeigt ausführliche Informationen an.
+    Performs the cleanup and displays verbose information.
 
 .EXAMPLE
     Invoke-TempFileCleanup -LogPath "C:\Logs\TempCleanup.log"
-    Führt die Bereinigung durch und speichert das Log unter dem angegebenen Pfad.
+    Performs the cleanup and saves the log to the specified path.
 
 .NOTES
-    - Unterstützt PowerShell Version 5.1 und höher.
-    - Erfordert ausreichende Berechtigungen zum Löschen von Dateien in den Zielverzeichnissen.
-    - Stellt sicher, dass sensible Daten nicht gelöscht werden.
+    - Supports PowerShell version 5.1 and above.
+    - Requires sufficient permissions to delete files in the target directories.
+    - Ensures that sensitive data is not deleted.
 #>
 
 function Invoke-TempFileCleanup {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Gibt an, ob ausführliche Ausgaben angezeigt werden sollen.")]
+                   HelpMessage = "Specifies whether to display verbose outputs.")]
         [switch]$VerboseOutput,
 
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Gibt den Pfad für die Log-Datei an.")]
+                   HelpMessage = "Specifies the path for the log file.")]
         [string]$LogPath = "$PSScriptRoot\TempFileCleanup_$((Get-Date).ToString('yyyyMMdd_HHmmss')).log"
     )
 
@@ -48,7 +48,7 @@ function Invoke-TempFileCleanup {
         } else {
             $VerbosePreference = 'SilentlyContinue'
         }
-        Write-Verbose "Initialisiere temporäre Dateienbereinigung..."
+        Write-Verbose "Initializing temporary file cleanup..."
 
         $StartTime = Get-Date
         $TotalFilesDeleted = 0
@@ -59,7 +59,7 @@ function Invoke-TempFileCleanup {
 
     process {
         try {
-            Write-Verbose "Scanne nach temporären Dateien..."
+            Write-Verbose "Scanning for temporary files..."
 
             $tempPaths = @(
                 "$env:TEMP",
@@ -68,7 +68,7 @@ function Invoke-TempFileCleanup {
 
             foreach ($path in $tempPaths) {
                 if (Test-Path $path) {
-                    Write-Verbose "Bereinige Verzeichnis: $path"
+                    Write-Verbose "Cleaning directory: $path"
 
                     $files = Get-ChildItem -Path "$path\*" -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -82,21 +82,21 @@ function Invoke-TempFileCleanup {
                         $TotalSpaceFreed += $filesSize
                         $CleanedDirectories += $path
 
-                        Write-Verbose "Gelöschte Dateien: $filesCount"
-                        Write-Verbose ("Freigegebener Speicherplatz: {0:N2} MB" -f ($filesSize / 1MB))
+                        Write-Verbose "Deleted files: $filesCount"
+                        Write-Verbose ("Freed space: {0:N2} MB" -f ($filesSize / 1MB))
                     } else {
-                        Write-Verbose "Keine temporären Dateien in $path gefunden."
+                        Write-Verbose "No temporary files found in $path."
                     }
 
                 } else {
-                    Write-Verbose "Verzeichnis nicht gefunden: $path"
+                    Write-Verbose "Directory not found: $path"
                 }
             }
 
-            Write-Verbose "Temporäre Dateien erfolgreich bereinigt."
+            Write-Verbose "Temporary files cleaned successfully."
         }
         catch {
-            Write-Error "Fehler bei der Bereinigung temporärer Dateien: $_"
+            Write-Error "Error during temporary file cleanup: $_"
         }
     }
 
@@ -106,34 +106,34 @@ function Invoke-TempFileCleanup {
 
         $Summary = @"
 Temporary File Cleanup Complete:
-Startzeit: $($StartTime)
-Endzeit: $($EndTime)
-Dauer: $($Duration)
+Start Time: $($StartTime)
+End Time: $($EndTime)
+Duration: $($Duration)
 
-Gelöschte Dateien insgesamt: $TotalFilesDeleted
-Freigegebener Speicherplatz insgesamt: {0:N2} MB
+Total Files Deleted: $TotalFilesDeleted
+Total Space Freed: {0:N2} MB
 
-Bereinigte Verzeichnisse:
+Cleaned Directories:
 $($CleanedDirectories -join "`n")
 "@
 
-        Write-Verbose "Bereinigungsprozess abgeschlossen."
+        Write-Verbose "Cleanup process completed."
         Write-Verbose $Summary
 
-        # Log schreiben
+        # Write log
         $LogContent += "**********************"
-        $LogContent += "Start der Windows PowerShell-Aufzeichnung"
-        $LogContent += "Startzeit: $($StartTime.ToString('yyyyMMddHHmmss'))"
-        $LogContent += "Benutzername: $([Environment]::UserDomainName)\$([Environment]::UserName)"
+        $LogContent += "Start of Windows PowerShell transcript"
+        $LogContent += "Start Time: $($StartTime.ToString('yyyyMMddHHmmss'))"
+        $LogContent += "Username: $([Environment]::UserDomainName)\$([Environment]::UserName)"
         $LogContent += "Computer: $env:COMPUTERNAME ($env:OS)"
         $LogContent += "**********************"
         $LogContent += $Summary
         $LogContent += "**********************"
-        $LogContent += "Ende der Windows PowerShell-Aufzeichnung"
-        $LogContent += "Endzeit: $($EndTime.ToString('yyyyMMddHHmmss'))"
+        $LogContent += "End of Windows PowerShell transcript"
+        $LogContent += "End Time: $($EndTime.ToString('yyyyMMddHHmmss'))"
         $LogContent += "**********************"
 
         $LogContent | Out-File -FilePath $LogPath -Encoding UTF8
-        Write-Verbose "Log gespeichert unter: $LogPath"
+        Write-Verbose "Log saved at: $LogPath"
     }
 }

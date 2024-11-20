@@ -1,26 +1,26 @@
 <#
 .SYNOPSIS
-    Führt eine detaillierte Datenträgerprüfung durch und liefert informative Konsolen- und Logausgaben.
+    Performs a detailed disk check and provides informative console and log outputs.
 
 .DESCRIPTION
-    Dieses Modul führt eine umfassende Überprüfung der Datenträger durch und repariert Fehler, wenn angegeben. Während des Prozesses werden detaillierte Informationen über die ausgeführten Schritte, Ergebnisse und etwaige Fehler ausgegeben und protokolliert.
+    This module performs a comprehensive check of disks and repairs errors if specified. During the process, detailed information about the steps performed, results, and any errors are displayed and logged.
 
 .PARAMETER RepairMode
-    Aktiviert den Reparaturmodus, um gefundene Fehler automatisch zu beheben.
+    Enables repair mode to automatically fix found errors.
 
 .PARAMETER VerboseOutput
-    Schaltet die ausführliche Konsolenausgabe ein.
+    Enables verbose console output.
 
 .EXAMPLE
     Invoke-DiskCheck
-    Führt eine Datenträgerprüfung mit Standardeinstellungen durch und liefert informative Ausgaben.
+    Performs a disk check with default settings and provides informative outputs.
 
 .EXAMPLE
     Invoke-DiskCheck -RepairMode -VerboseOutput
-    Führt die Datenträgerprüfung im Reparaturmodus durch und zeigt zusätzliche ausführliche Informationen an.
+    Performs the disk check in repair mode and displays additional verbose information.
 
 .NOTES
-    Dieses Modul wurde erweitert, um die Konsolen- und Logausgaben deutlich informativer zu gestalten. Es folgt den PowerShell Best Practices und implementiert robuste Fehlerbehandlung sowie Logging.
+    This module has been enhanced to make console and log outputs significantly more informative. It follows PowerShell Best Practices and implements robust error handling and logging.
 
 #>
 
@@ -28,99 +28,99 @@ function Invoke-DiskCheck {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Aktiviert den Reparaturmodus.")]
+                   HelpMessage = "Enables repair mode.")]
         [switch]$RepairMode,
 
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Schaltet die ausführliche Konsolenausgabe ein.")]
+                   HelpMessage = "Enables verbose console output.")]
         [switch]$VerboseOutput
     )
 
     begin {
-        # Konfiguration der ausführlichen Ausgabe
+        # Configuration of verbose output
         if ($VerboseOutput.IsPresent) {
             $VerbosePreference = 'Continue'
         } else {
             $VerbosePreference = 'SilentlyContinue'
         }
 
-        # Initialisierung der Logdatei
+        # Initialization of the log file
         $LogFile = Join-Path -Path $env:TEMP -ChildPath "DiskCheckLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
-        Write-Verbose "Initialisiere Datenträgerprüfung..."
-        Write-Verbose "Logdatei wird erstellt unter: $LogFile"
-        "[$(Get-Date)] - Datenträgerprüfung gestartet." | Out-File -FilePath $LogFile -Encoding UTF8
+        Write-Verbose "Initializing disk check..."
+        Write-Verbose "Log file will be created at: $LogFile"
+        "[$(Get-Date)] - Disk check started." | Out-File -FilePath $LogFile -Encoding UTF8
     }
 
     process {
         try {
-            Write-Verbose "Starte Datenträgerprüfung..."
-            Write-Information "Die Datenträgerprüfung wird gestartet." -InformationAction Continue
-            Write-Host "Starte die Datenträgerprüfung..."
+            Write-Verbose "Starting disk check..."
+            Write-Information "Disk check is starting." -InformationAction Continue
+            Write-Host "Starting disk check..."
 
-            # Plattformüberprüfung
+            # Platform check
             if ($PSVersionTable.Platform -eq 'Win32NT') {
-                # Kommandozeilenargumente erstellen
+                # Create command line arguments
                 $arguments = "/scan"
 
                 if ($RepairMode.IsPresent) {
                     $arguments += " /forceofflinefix /perf"
-                    Write-Verbose "Reparaturmodus aktiviert."
-                    Write-Host "Reparaturmodus ist aktiviert. Gefundene Fehler werden automatisch behoben."
+                    Write-Verbose "Repair mode enabled."
+                    Write-Host "Repair mode is enabled. Found errors will be automatically fixed."
                 } else {
-                    Write-Verbose "Reparaturmodus nicht aktiviert."
-                    Write-Host "Reparaturmodus ist nicht aktiviert. Es werden keine Änderungen vorgenommen."
+                    Write-Verbose "Repair mode not enabled."
+                    Write-Host "Repair mode is not enabled. No changes will be made."
                 }
 
-                # Pfad zu chkdsk.exe ermitteln
+                # Determine path to chkdsk.exe
                 $ChkdskPath = Join-Path -Path $env:SystemRoot -ChildPath "System32\chkdsk.exe"
 
                 if (Test-Path $ChkdskPath) {
-                    Write-Verbose "Ausführen von '$ChkdskPath' mit Argumenten '$arguments'"
-                    Write-Host "Führe 'chkdsk.exe' aus mit den angegebenen Optionen..."
+                    Write-Verbose "Executing '$ChkdskPath' with arguments '$arguments'"
+                    Write-Host "Running 'chkdsk.exe' with the specified options..."
 
-                    # Starten der Überprüfung und Messung der Dauer
+                    # Start the check and measure the duration
                     $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-                    # Prozessinformationen erstellen
+                    # Create process information
                     $processInfo = New-Object System.Diagnostics.ProcessStartInfo
                     $processInfo.FileName = $ChkdskPath
                     $processInfo.Arguments = $arguments
                     $processInfo.Verb = "runas"
                     $processInfo.UseShellExecute = $true
 
-                    # Prozess starten
+                    # Start process
                     $process = [System.Diagnostics.Process]::Start($processInfo)
                     $process.WaitForExit()
                     $Stopwatch.Stop()
 
-                    Write-Verbose "Datenträgerprüfung abgeschlossen in $($Stopwatch.Elapsed.TotalSeconds) Sekunden."
-                    Write-Host "Datenträgerprüfung erfolgreich abgeschlossen."
-                    "[$(Get-Date)] - Datenträgerprüfung erfolgreich abgeschlossen in $($Stopwatch.Elapsed.TotalSeconds) Sekunden." | Add-Content -Path $LogFile
+                    Write-Verbose "Disk check completed in $($Stopwatch.Elapsed.TotalSeconds) seconds."
+                    Write-Host "Disk check completed successfully."
+                    "[$(Get-Date)] - Disk check completed successfully in $($Stopwatch.Elapsed.TotalSeconds) seconds." | Add-Content -Path $LogFile
 
-                    # Optional: Auswertung der Ergebnisse
-                    # Hier könnte zusätzlicher Code eingefügt werden, um die Ergebnisse auszuwerten und detaillierter zu berichten
+                    # Optional: Evaluation of results
+                    # Additional code could be added here to evaluate the results and report in more detail
                 } else {
-                    $ErrorMessage = "Das Dienstprogramm 'chkdsk.exe' wurde nicht gefunden."
+                    $ErrorMessage = "The utility 'chkdsk.exe' was not found."
                     Write-Error $ErrorMessage
-                    "[$(Get-Date)] - FEHLER: $ErrorMessage" | Add-Content -Path $LogFile
+                    "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
                 }
             } else {
-                $WarningMessage = "Die Datenträgerprüfung ist unter diesem Betriebssystem nicht verfügbar."
+                $WarningMessage = "Disk check is not available on this operating system."
                 Write-Warning $WarningMessage
-                "[$(Get-Date)] - WARNUNG: $WarningMessage" | Add-Content -Path $LogFile
+                "[$(Get-Date)] - WARNING: $WarningMessage" | Add-Content -Path $LogFile
             }
         }
         catch {
-            $ErrorMessage = "Fehler bei der Datenträgerprüfung: $($_.Exception.Message)"
+            $ErrorMessage = "Error during disk check: $($_.Exception.Message)"
             Write-Error $ErrorMessage
-            "[$(Get-Date)] - FEHLER: $ErrorMessage" | Add-Content -Path $LogFile
+            "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
         }
     }
 
     end {
-        Write-Verbose "Datenträgerprüfungsprozess abgeschlossen."
-        Write-Host "Datenträgerprüfungsprozess abgeschlossen."
-        "[$(Get-Date)] - Datenträgerprüfungsprozess abgeschlossen." | Add-Content -Path $LogFile
-        Write-Verbose "Details finden Sie in der Logdatei: $LogFile"
+        Write-Verbose "Disk check process completed."
+        Write-Host "Disk check process completed."
+        "[$(Get-Date)] - Disk check process completed." | Add-Content -Path $LogFile
+        Write-Verbose "Details can be found in the log file: $LogFile"
     }
 }

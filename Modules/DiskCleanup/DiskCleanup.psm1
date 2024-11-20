@@ -1,23 +1,23 @@
 <#
 .SYNOPSIS
-    Führt eine detaillierte Datenträgerbereinigung durch und liefert informative Konsolen- und Logausgaben.
+    Performs a detailed disk cleanup and provides informative console and log outputs.
 
 .DESCRIPTION
-    Dieses Modul führt eine umfassende Datenträgerbereinigung durch, um unnötige Dateien zu entfernen und Speicherplatz freizugeben. Während des Prozesses werden detaillierte Informationen über die ausgeführten Schritte, Ergebnisse und etwaige Fehler ausgegeben und protokolliert.
+    This module performs a comprehensive disk cleanup to remove unnecessary files and free up space. During the process, detailed information about the steps performed, results, and any errors are displayed and logged.
 
 .PARAMETER VerboseOutput
-    Schaltet die ausführliche Konsolenausgabe ein.
+    Enables verbose console output.
 
 .EXAMPLE
     Invoke-DiskCleanup
-    Führt die Datenträgerbereinigung mit Standardeinstellungen durch und liefert informative Ausgaben.
+    Performs disk cleanup with default settings and provides informative outputs.
 
 .EXAMPLE
     Invoke-DiskCleanup -VerboseOutput
-    Führt die Bereinigung durch und zeigt zusätzliche ausführliche Informationen an.
+    Performs the cleanup and displays additional verbose information.
 
 .NOTES
-    Dieses Modul wurde erweitert, um die Konsolen- und Logausgaben deutlich informativer zu gestalten. Es folgt den PowerShell Best Practices und implementiert robuste Fehlerbehandlung sowie Logging.
+    This module has been enhanced to make console and log outputs significantly more informative. It follows PowerShell Best Practices and implements robust error handling and logging.
 
 #>
 
@@ -25,76 +25,76 @@ function Invoke-DiskCleanup {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Schaltet die ausführliche Konsolenausgabe ein.")]
+                   HelpMessage = "Enables verbose console output.")]
         [switch]$VerboseOutput
     )
 
     begin {
-        # Konfiguration der ausführlichen Ausgabe
+        # Configuration of verbose output
         if ($VerboseOutput.IsPresent) {
             $VerbosePreference = 'Continue'
         } else {
             $VerbosePreference = 'SilentlyContinue'
         }
 
-        # Initialisierung der Logdatei
+        # Initialization of the log file
         $LogFile = Join-Path -Path $env:TEMP -ChildPath "DiskCleanupLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
-        Write-Verbose "Initialisiere Datenträgerbereinigung..."
-        Write-Verbose "Logdatei wird erstellt unter: $LogFile"
-        "[$(Get-Date)] - Datenträgerbereinigung gestartet." | Out-File -FilePath $LogFile -Encoding UTF8
+        Write-Verbose "Initializing disk cleanup..."
+        Write-Verbose "Log file will be created at: $LogFile"
+        "[$(Get-Date)] - Disk cleanup started." | Out-File -FilePath $LogFile -Encoding UTF8
     }
 
     process {
         try {
-            Write-Verbose "Starte Datenträgerbereinigung..."
-            Write-Information "Die Datenträgerbereinigung wird gestartet." -InformationAction Continue
-            Write-Host "Starte die Datenträgerbereinigung..."
+            Write-Verbose "Starting disk cleanup..."
+            Write-Information "Disk cleanup is starting." -InformationAction Continue
+            Write-Host "Starting disk cleanup..."
 
-            # Plattformüberprüfung
+            # Platform check
             if ($PSVersionTable.Platform -eq 'Win32NT') {
-                # Überprüfen, ob 'cleanmgr.exe' vorhanden ist
+                # Check if 'cleanmgr.exe' exists
                 $CleanMgrPath = Join-Path -Path $env:Windir -ChildPath "System32\cleanmgr.exe"
 
                 if (Test-Path $CleanMgrPath) {
                     $CleanupArgs = "/sagerun:1"
-                    Write-Verbose "Ausführen von '$CleanMgrPath' mit Argumenten '$CleanupArgs'"
-                    Write-Host "Führe 'cleanmgr.exe' aus mit vordefinierten Einstellungen..."
+                    Write-Verbose "Executing '$CleanMgrPath' with arguments '$CleanupArgs'"
+                    Write-Host "Running 'cleanmgr.exe' with predefined settings..."
 
-                    # Starten der Bereinigung und Messung der Dauer
+                    # Start cleanup and measure duration
                     $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                     Start-Process -FilePath $CleanMgrPath -ArgumentList $CleanupArgs -Wait -ErrorAction Stop
                     $Stopwatch.Stop()
 
-                    Write-Verbose "Datenträgerbereinigung abgeschlossen in $($Stopwatch.Elapsed.TotalSeconds) Sekunden."
-                    Write-Host "Datenträgerbereinigung erfolgreich abgeschlossen."
-                    "[$(Get-Date)] - Datenträgerbereinigung erfolgreich abgeschlossen in $($Stopwatch.Elapsed.TotalSeconds) Sekunden." | Add-Content -Path $LogFile
+                    Write-Verbose "Disk cleanup completed in $($Stopwatch.Elapsed.TotalSeconds) seconds."
+                    Write-Host "Disk cleanup completed successfully."
+                    "[$(Get-Date)] - Disk cleanup completed successfully in $($Stopwatch.Elapsed.TotalSeconds) seconds." | Add-Content -Path $LogFile
 
-                    # Optional: Hinzufügen von Informationen zum freigegebenen Speicherplatz
-                    # Hier könnte zusätzlicher Code eingefügt werden, um den freigegebenen Speicherplatz zu ermitteln und auszugeben
+                    # Optional: Add information about freed up space
+                    # Additional code could be added here to calculate and display the freed disk space
                 }
                 else {
-                    $ErrorMessage = "Das Dienstprogramm 'cleanmgr.exe' wurde nicht gefunden."
+                    $ErrorMessage = "The utility 'cleanmgr.exe' was not found."
                     Write-Error $ErrorMessage
-                    "[$(Get-Date)] - FEHLER: $ErrorMessage" | Add-Content -Path $LogFile
+                    "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
                 }
             }
             else {
-                $WarningMessage = "Die Datenträgerbereinigung ist unter diesem Betriebssystem nicht verfügbar."
+                $WarningMessage = "Disk cleanup is not available on this operating system."
                 Write-Warning $WarningMessage
-                "[$(Get-Date)] - WARNUNG: $WarningMessage" | Add-Content -Path $LogFile
+                "[$(Get-Date)] - WARNING: $WarningMessage" | Add-Content -Path $LogFile
             }
         }
         catch {
-            $ErrorMessage = "Fehler bei der Datenträgerbereinigung: $($_.Exception.Message)"
+            $ErrorMessage = "Error during disk cleanup: $($_.Exception.Message)"
             Write-Error $ErrorMessage
-            "[$(Get-Date)] - FEHLER: $ErrorMessage" | Add-Content -Path $LogFile
+            "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
         }
     }
 
     end {
-        Write-Verbose "Bereinigungsprozess abgeschlossen."
-        Write-Host "Bereinigungsprozess abgeschlossen."
-        "[$(Get-Date)] - Bereinigungsprozess abgeschlossen." | Add-Content -Path $LogFile
-        Write-Verbose "Details finden Sie in der Logdatei: $LogFile"
+        Write-Verbose "Cleanup process completed."
+        Write-Host "Cleanup process completed."
+        "[$(Get-Date)] - Cleanup process completed." | Add-Content -Path $LogFile
+        Write-Verbose "Details can be found in the log file: $LogFile"
     }
 }

@@ -1,71 +1,71 @@
 <#
 .SYNOPSIS
-    Installiert verfügbare Windows Updates mit detaillierten Konsolen- und Logausgaben.
+    Installs available Windows Updates with detailed console and log outputs.
 
 .DESCRIPTION
-    Dieses Modul überprüft auf verfügbare Windows Updates und installiert sie.
-    Während des Prozesses werden detaillierte Informationen über die ausgeführten Schritte, gefundene Updates, Installationsfortschritt und etwaige Fehler ausgegeben und protokolliert.
-    Alle Aktionen werden in einer Logdatei im temporären Verzeichnis gespeichert.
+    This module checks for available Windows Updates and installs them.
+    During the process, detailed information about the steps performed, found updates, installation progress, and any errors are displayed and logged.
+    All actions are saved in a log file in the temporary directory.
 
 .PARAMETER VerboseOutput
-    Schaltet die ausführliche Konsolenausgabe ein, um zusätzliche Debugging-Informationen anzuzeigen.
+    Enables verbose console output to display additional debugging information.
 
 .EXAMPLE
     Invoke-WindowsUpdate
-    Installiert verfügbare Windows Updates mit standardmäßigen Konsolen- und Logausgaben.
+    Installs available Windows Updates with standard console and log outputs.
 
 .EXAMPLE
     Invoke-WindowsUpdate -VerboseOutput
-    Installiert verfügbare Windows Updates mit ausführlichen Konsolen- und Logausgaben.
+    Installs available Windows Updates with verbose console and log outputs.
 
 .NOTES
     Version:        1.2.0
-    Author:         Ihr Name
-    Creation Date:  20.11.2023
-    Last Modified:  20.11.2023
+    Author:         Your Name
+    Creation Date:  11/20/2023
+    Last Modified:  11/20/2023
 #>
 
 function Invoke-WindowsUpdate {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Schaltet die ausführliche Konsolenausgabe ein.")]
+                   HelpMessage = "Enables verbose console output.")]
         [switch]$VerboseOutput
     )
 
     begin {
-        # Konfiguration der ausführlichen Ausgabe
+        # Configuration of verbose output
         if ($VerboseOutput.IsPresent) {
             $VerbosePreference = 'Continue'
-            Write-Verbose "Ausführliche Ausgabe aktiviert."
+            Write-Verbose "Verbose output enabled."
         } else {
             $VerbosePreference = 'SilentlyContinue'
         }
 
-        # Initialisierung der Logdatei
+        # Initialization of the log file
         $LogFile = Join-Path -Path $env:TEMP -ChildPath "WindowsUpdateLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
-        Write-Verbose "Initialisiere Windows Update Prozess..."
-        Write-Verbose "Logdatei wird erstellt unter: $LogFile"
-        "[$(Get-Date)] - Windows Update Prozess gestartet." | Out-File -FilePath $LogFile -Encoding UTF8
+        Write-Verbose "Initializing Windows Update process..."
+        Write-Verbose "Log file will be created at: $LogFile"
+        "[$(Get-Date)] - Windows Update process started." | Out-File -FilePath $LogFile -Encoding UTF8
 
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Initialisiere Windows Update Prozess..."
+        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Initializing Windows Update process..."
     }
 
     process {
         try {
-            # Überprüfung auf verfügbare Updates
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Überprüfe auf verfügbare Updates..."
-            Write-Information "Überprüfe auf verfügbare Updates..." -InformationAction Continue
-            Write-Verbose "Rufe verfügbare Updates ab..."
+            # Checking for available updates
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Checking for available updates..."
+            Write-Information "Checking for available updates..." -InformationAction Continue
+            Write-Verbose "Retrieving available updates..."
 
-            # Erfordert das Modul PSWindowsUpdate
+            # Requires the PSWindowsUpdate module
             if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
-                Write-Verbose "PSWindowsUpdate-Modul nicht gefunden. Installiere Modul..."
+                Write-Verbose "PSWindowsUpdate module not found. Installing module..."
                 Install-Module -Name PSWindowsUpdate -Force -ErrorAction Stop
-                Write-Verbose "PSWindowsUpdate-Modul erfolgreich installiert."
+                Write-Verbose "PSWindowsUpdate module successfully installed."
                 Import-Module -Name PSWindowsUpdate -ErrorAction Stop
             } else {
-                Write-Verbose "PSWindowsUpdate-Modul ist vorhanden."
+                Write-Verbose "PSWindowsUpdate module is present."
                 Import-Module -Name PSWindowsUpdate -ErrorAction Stop
             }
 
@@ -73,42 +73,42 @@ function Invoke-WindowsUpdate {
             $updateCount = $updates.Count
 
             if ($updateCount -gt 0) {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Es wurden $updateCount Updates gefunden."
-                Write-Verbose "Gefundene Updates:"
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Found $updateCount updates."
+                Write-Verbose "Found updates:"
                 foreach ($update in $updates) {
                     Write-Verbose " - $($update.Title)"
-                    "[$(Get-Date)] - Gefundenes Update: $($update.Title)" | Add-Content -Path $LogFile
+                    "[$(Get-Date)] - Found update: $($update.Title)" | Add-Content -Path $LogFile
                 }
 
-                # Installation der Updates
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Installiere verfügbare Updates..."
-                Write-Information "Installation der Updates wird gestartet..." -InformationAction Continue
-                Write-Verbose "Starte Installation der Updates..."
+                # Installation of the updates
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Installing available updates..."
+                Write-Information "Starting installation of updates..." -InformationAction Continue
+                Write-Verbose "Starting installation of updates..."
 
                 $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                 Install-WindowsUpdate -AcceptAll -AutoReboot -ErrorAction Stop
                 $Stopwatch.Stop()
 
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Updates erfolgreich installiert."
-                Write-Verbose "Installation abgeschlossen in $($Stopwatch.Elapsed.TotalMinutes.ToString("N2")) Minuten."
-                "[$(Get-Date)] - Updates erfolgreich installiert in $($Stopwatch.Elapsed.TotalMinutes.ToString("N2")) Minuten." | Add-Content -Path $LogFile
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Updates successfully installed."
+                Write-Verbose "Installation completed in $($Stopwatch.Elapsed.TotalMinutes.ToString("N2")) minutes."
+                "[$(Get-Date)] - Updates successfully installed in $($Stopwatch.Elapsed.TotalMinutes.ToString("N2")) minutes." | Add-Content -Path $LogFile
             } else {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Keine Updates verfügbar."
-                Write-Verbose "Es wurden keine Updates gefunden."
-                "[$(Get-Date)] - Keine Updates verfügbar." | Add-Content -Path $LogFile
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] No updates available."
+                Write-Verbose "No updates were found."
+                "[$(Get-Date)] - No updates available." | Add-Content -Path $LogFile
             }
         }
         catch {
-            $ErrorMessage = "Fehler bei der Installation der Windows Updates: $($_.Exception.Message)"
+            $ErrorMessage = "Error during the installation of Windows Updates: $($_.Exception.Message)"
             Write-Error "[$(Get-Date -Format 'HH:mm:ss')] $ErrorMessage"
-            "[$(Get-Date)] - FEHLER: $ErrorMessage" | Add-Content -Path $LogFile
+            "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
         }
     }
 
     end {
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Windows Update Prozess abgeschlossen."
-        Write-Verbose "Windows Update Prozess abgeschlossen."
-        "[$(Get-Date)] - Windows Update Prozess abgeschlossen." | Add-Content -Path $LogFile
-        Write-Verbose "Details finden Sie in der Logdatei: $LogFile"
+        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Windows Update process completed."
+        Write-Verbose "Windows Update process completed."
+        "[$(Get-Date)] - Windows Update process completed." | Add-Content -Path $LogFile
+        Write-Verbose "You can find details in the log file: $LogFile"
     }
 }

@@ -1,33 +1,33 @@
 <#
 .SYNOPSIS
-    Lädt und führt PowerShell-Module aus einem angegebenen Verzeichnis mit einem Modul-Auswahlassistenten beim Start aus.
+    Loads and executes PowerShell modules from a specified directory with a module selection prompt at startup.
 
 .DESCRIPTION
-    Dieses Skript bietet ein Framework zum Laden und Ausführen von PowerShell-Modulen.
-    Module werden aus dem 'Modules'-Unterverzeichnis relativ zum Speicherort des Skripts geladen.
-    Beim Start wird ein Auswahlassistent angezeigt, mit dem der Benutzer ein Modul auswählen kann.
-    Nach der Ausführung eines Moduls wird das aktuellste Log im Modulverzeichnis in der Konsole angezeigt.
-    Die Logrotation wird immer ausgeführt, nachdem ein Modul ein neues Log erstellt hat.
+    This script provides a framework for loading and executing PowerShell modules.
+    Modules are loaded from the 'Modules' subdirectory relative to the script's location.
+    At startup, a selection prompt is displayed, allowing the user to choose a module.
+    After executing a module, the latest log in the module directory is displayed in the console.
+    Log rotation is always performed after a module creates a new log.
 
 .PARAMETER ModuleName
-    Der Name des Moduls, das geladen werden soll (ohne die .psm1-Erweiterung).
-    Wenn nicht angegeben, wird ein Modul-Auswahlassistent angezeigt.
+    The name of the module to load (without the .psm1 extension).
+    If not specified, a module selection prompt will be displayed.
 
 .PARAMETER ModuleParameters
-    Zusätzliche Parameter, die an die Invoke-Funktion des Moduls übergeben werden.
+    Additional parameters passed to the module's Invoke function.
 
 .EXAMPLE
     .\Main.ps1
 
-    Startet das Skript und zeigt den Modul-Auswahlassistenten an.
+    Starts the script and displays the module selection prompt.
 
 .EXAMPLE
     .\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-Verbose")
 
-    Lädt das 'DiskCheck'-Modul und führt es mit dem Parameter -Verbose aus.
+    Loads the 'DiskCheck' module and executes it with the parameter -Verbose.
 
 .NOTES
-    Teile dieses Skripts erfordern Administratorrechte. Die Anzeige des Logs und die Logrotation nach der Modulverarbeitung erfordern keine erhöhten Rechte.
+    Parts of this script require administrator privileges. Displaying the log and performing log rotation after module processing do not require elevated rights.
 #>
 [CmdletBinding()]
 param(
@@ -38,27 +38,27 @@ param(
     [string[]]$ModuleParameters
 )
 
-# Globale Variablen
+# Global variables
 $ModulesPath = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) "Modules"
 
 function Show-LatestModuleLog {
     <#
     .SYNOPSIS
-        Zeigt das aktuellste Log eines Moduls in der Konsole an.
+        Displays the latest log of a module in the console.
 
     .DESCRIPTION
-        Diese Funktion sucht im Modulverzeichnis nach der aktuellsten Log-Datei und gibt deren Inhalt in der Konsole aus.
+        This function searches the module directory for the most recent log file and outputs its content to the console.
 
     .PARAMETER ModuleName
-        Der Name des Moduls, dessen Log angezeigt werden soll.
+        The name of the module whose log should be displayed.
 
     .EXAMPLE
         Show-LatestModuleLog -ModuleName "DiskCleanup"
 
-        Zeigt das aktuellste Log des Moduls 'DiskCleanup' an.
+        Displays the latest log of the 'DiskCleanup' module.
 
     .NOTES
-        Die Funktion geht davon aus, dass die Log-Dateien die Erweiterung '.log' haben und im Modulverzeichnis gespeichert sind.
+        The function assumes that log files have the '.log' extension and are stored in the module directory.
     #>
     [CmdletBinding()]
     param(
@@ -70,7 +70,7 @@ function Show-LatestModuleLog {
         $ModuleDirectory = Join-Path $ModulesPath $ModuleName
 
         if (-not (Test-Path $ModuleDirectory)) {
-            Write-Warning "Modulverzeichnis nicht gefunden: $ModuleDirectory"
+            Write-Warning "Module directory not found: $ModuleDirectory"
             return
         }
 
@@ -79,39 +79,39 @@ function Show-LatestModuleLog {
             Select-Object -First 1
 
         if ($LatestLog) {
-            Write-Host "Inhalt des neuesten Logs für Modul '$ModuleName':" -ForegroundColor Cyan
+            Write-Host "Content of the latest log for module '$ModuleName':" -ForegroundColor Cyan
             Get-Content -Path $LatestLog.FullName
         }
         else {
-            Write-Warning "Keine Log-Dateien im Modulverzeichnis gefunden für Modul '$ModuleName'."
+            Write-Warning "No log files found in the module directory for module '$ModuleName'."
         }
     }
     catch {
-        Write-Error "Fehler beim Anzeigen des neuesten Logs: $_"
+        Write-Error "Error displaying the latest log: $_"
     }
 }
 
 function Invoke-ModuleExecution {
     <#
     .SYNOPSIS
-        Führt die Modulverarbeitung aus, die Administratorrechte erfordert.
+        Executes module processing that requires administrator privileges.
 
     .DESCRIPTION
-        Diese Funktion lädt das ausgewählte Modul und führt die entsprechende Invoke-Funktion aus.
+        This function loads the selected module and executes the corresponding Invoke function.
 
     .PARAMETER ModuleName
-        Der Name des zu ladenden Moduls.
+        The name of the module to load.
 
     .PARAMETER ModuleParameters
-        Zusätzliche Parameter für die Modul-Invoke-Funktion.
+        Additional parameters for the module's Invoke function.
 
     .EXAMPLE
         Invoke-ModuleExecution -ModuleName "DiskCheck" -ModuleParameters @("-Verbose")
 
-        Führt das Modul 'DiskCheck' mit dem Parameter -Verbose aus.
+        Executes the 'DiskCheck' module with the parameter -Verbose.
 
     .NOTES
-        Diese Funktion erfordert Administratorrechte.
+        This function requires administrator privileges.
     #>
     [CmdletBinding()]
     param(
@@ -123,24 +123,24 @@ function Invoke-ModuleExecution {
     )
 
     try {
-        # PSModulePath aktualisieren
+        # Update PSModulePath
         $env:PSModulePath = "$ModulesPath;$env:PSModulePath"
 
-        # Modul importieren
+        # Import module
         Import-Module $ModuleName -ErrorAction Stop
 
-        # Dynamisch den Befehl mit Parametern zusammenstellen
+        # Dynamically construct the command with parameters
         $Command = "Invoke-$ModuleName"
         $ParamList = @{}
 
         if ($ModuleParameters) {
-            # Modulparameter parsen
+            # Parse module parameters
             for ($i = 0; $i -lt $ModuleParameters.Count; $i++) {
                 $param = $ModuleParameters[$i]
                 if ($param -match '^-(.+)$') {
                     $ParamName = $matches[1]
                     $ParamValue = $true
-                    # Überprüfen, ob ein Wert für den Parameter angegeben wurde
+                    # Check if a value for the parameter was provided
                     if ($i + 1 -lt $ModuleParameters.Count -and -not ($ModuleParameters[$i + 1] -match '^-')) {
                         $ParamValue = $ModuleParameters[$i + 1]
                         $i++
@@ -150,32 +150,32 @@ function Invoke-ModuleExecution {
             }
         }
 
-        # Modul-Funktionsaufruf mit Parametern ausführen
+        # Execute module function call with parameters
         & $Command @ParamList
     }
     catch {
-        Write-Error "Ein Fehler ist aufgetreten: $_"
+        Write-Error "An error occurred: $_"
     }
 }
 
 function Rotate-ModuleLogs {
     <#
     .SYNOPSIS
-        Führt die Logrotation für ein Modul aus.
+        Performs log rotation for a module.
 
     .DESCRIPTION
-        Behalte nur die neuesten drei Log-Dateien für das angegebene Modul.
+        Retain only the latest three log files for the specified module.
 
     .PARAMETER ModuleName
-        Der Name des Moduls, dessen Logs rotiert werden sollen.
+        The name of the module whose logs should be rotated.
 
     .EXAMPLE
         Rotate-ModuleLogs -ModuleName "DiskCleanup"
 
-        Führt die Logrotation für das Modul 'DiskCleanup' aus.
+        Performs log rotation for the 'DiskCleanup' module.
 
     .NOTES
-        Diese Funktion erfordert keine Administratorrechte.
+        This function does not require administrator privileges.
     #>
     [CmdletBinding()]
     param(
@@ -187,7 +187,7 @@ function Rotate-ModuleLogs {
         $ModuleDirectory = Join-Path $ModulesPath $ModuleName
 
         if (-not (Test-Path $ModuleDirectory)) {
-            Write-Warning "Modulverzeichnis nicht gefunden: $ModuleDirectory"
+            Write-Warning "Module directory not found: $ModuleDirectory"
             return
         }
 
@@ -200,63 +200,63 @@ function Rotate-ModuleLogs {
         }
     }
     catch {
-        Write-Error "Fehler bei der Logrotation: $_"
+        Write-Error "Error during log rotation: $_"
     }
 }
 
-# Hauptlogik
+# Main logic
 
 try {
-    # Wenn kein Modulname angegeben ist, Modul-Auswahlassistent starten
+    # If no module name is specified, start module selection prompt
     if (-not $ModuleName) {
-        # Verfügbare Module auflisten
+        # List available modules
         $AvailableModules = Get-ChildItem -Path $ModulesPath -Directory | Select-Object -ExpandProperty Name
 
         if ($AvailableModules.Count -eq 0) {
-            throw "Keine Module im Modules-Verzeichnis gefunden."
+            throw "No modules found in the Modules directory."
         }
 
-        Write-Host "Verfügbare Module:"
+        Write-Host "Available modules:"
         for ($i = 0; $i -lt $AvailableModules.Count; $i++) {
             Write-Host "[$($i + 1)] $($AvailableModules[$i])"
         }
 
         do {
-            $selection = Read-Host "Bitte wählen Sie ein Modul durch Eingabe der entsprechenden Zahl"
+            $selection = Read-Host "Please select a module by entering the corresponding number"
             $selection = [int]$selection - 1
         } until ($selection -ge 0 -and $selection -lt $AvailableModules.Count)
 
         $ModuleName = $AvailableModules[$selection]
     }
 
-    # Überprüfen, ob als Administrator ausgeführt
+    # Check if running as administrator
     $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 
     if (-not $isAdmin) {
-        Write-Warning "Die Ausführung des Moduls erfordert Administratorrechte. Neustart im erhöhten Modus..."
+        Write-Warning "Executing the module requires administrator privileges. Restarting in elevated mode..."
 
-        # Argumente vorbereiten
+        # Prepare arguments
         $argList = "-ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -ModuleName `"$ModuleName`""
         if ($ModuleParameters) {
             $paramStr = $ModuleParameters | ForEach-Object { "`"$_`"" } -join ' '
             $argList += " -ModuleParameters $paramStr"
         }
 
-        # Skript in erhöhter Sitzung neu starten und Parameter übergeben
+        # Restart script in elevated session and pass parameters
         Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait
     }
     else {
-        # Modul ausführen
+        # Execute module
         Invoke-ModuleExecution -ModuleName $ModuleName -ModuleParameters $ModuleParameters
     }
 
-    # Logrotation nach Modulausführung durchführen
+    # Perform log rotation after module execution
     Rotate-ModuleLogs -ModuleName $ModuleName
 
-    # Nach der Logrotation das aktuellste Log anzeigen
+    # After log rotation, display the latest log
     Show-LatestModuleLog -ModuleName $ModuleName
 
 }
 catch {
-    Write-Error "Ein Fehler ist aufgetreten: $_"
+    Write-Error "An error occurred: $_"
 }

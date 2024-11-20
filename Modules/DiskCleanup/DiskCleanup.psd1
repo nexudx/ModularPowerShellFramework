@@ -4,7 +4,7 @@
     FunctionsToExport = 'Invoke-DiskCleanup'
     PrivateData = @{
         PSData = @{
-            # 'Parameters' Sektion entfernt, da 'ModuleVerbose' nicht mehr verwendet wird
+            # 'Parameters' section removed as 'ModuleVerbose' is no longer used
         }
     }
 }

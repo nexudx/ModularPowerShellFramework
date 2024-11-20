@@ -1,23 +1,23 @@
 <#
 .SYNOPSIS
-    Bereinigt die Browser-Caches mit detaillierten Konsolen- und Logausgaben.
+    Cleans browser caches with detailed console and log outputs.
 
 .DESCRIPTION
-    Dieses Modul bereinigt die Caches von installierten Browsern, um Speicherplatz freizugeben und die Privatsphäre zu verbessern. Während des Prozesses werden detaillierte Informationen über die ausgeführten Schritte, Ergebnisse und etwaige Fehler ausgegeben und protokolliert.
+    This module cleans the caches of installed browsers to free up space and improve privacy. During the process, detailed information about the steps performed, results, and any errors are displayed and logged.
 
 .PARAMETER VerboseOutput
-    Schaltet die ausführliche Konsolenausgabe ein.
+    Enables verbose console output.
 
 .EXAMPLE
     Invoke-BrowserCacheCleanup
-    Bereinigt die Browser-Caches mit Standardeinstellungen und liefert informative Ausgaben.
+    Cleans browser caches with default settings and provides informative outputs.
 
 .EXAMPLE
     Invoke-BrowserCacheCleanup -VerboseOutput
-    Bereinigt die Browser-Caches und zeigt zusätzliche ausführliche Informationen an.
+    Cleans browser caches and displays additional verbose information.
 
 .NOTES
-    Dieses Modul wurde erweitert, um die Konsolen- und Logausgaben deutlich informativer zu gestalten. Es folgt den PowerShell Best Practices und implementiert robuste Fehlerbehandlung sowie Logging.
+    This module has been enhanced to make console and log outputs significantly more informative. It follows PowerShell Best Practices and implements robust error handling and logging.
 
 #>
 
@@ -25,34 +25,34 @@ function Invoke-BrowserCacheCleanup {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Schaltet die ausführliche Konsolenausgabe ein.")]
+                   HelpMessage = "Enables verbose console output.")]
         [switch]$VerboseOutput
     )
 
     begin {
-        # Konfiguration der ausführlichen Ausgabe
+        # Configuration of verbose output
         if ($VerboseOutput.IsPresent) {
             $VerbosePreference = 'Continue'
         } else {
             $VerbosePreference = 'SilentlyContinue'
         }
 
-        # Initialisierung der Logdatei
+        # Initialization of the log file
         $LogFile = Join-Path -Path $env:TEMP -ChildPath "BrowserCacheCleanupLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
-        Write-Verbose "Initialisiere Browser-Cache-Bereinigung..."
-        Write-Verbose "Logdatei wird erstellt unter: $LogFile"
-        "[$(Get-Date)] - Browser-Cache-Bereinigung gestartet." | Out-File -FilePath $LogFile -Encoding UTF8
+        Write-Verbose "Initializing browser cache cleanup..."
+        Write-Verbose "Log file will be created at: $LogFile"
+        "[$(Get-Date)] - Browser cache cleanup started." | Out-File -FilePath $LogFile -Encoding UTF8
     }
 
     process {
         try {
-            Write-Verbose "Ermittle installierte Browser..."
-            Write-Information "Die Browser-Cache-Bereinigung wird gestartet." -InformationAction Continue
-            Write-Host "Starte die Browser-Cache-Bereinigung..."
+            Write-Verbose "Determining installed browsers..."
+            Write-Information "Browser cache cleanup is starting." -InformationAction Continue
+            Write-Host "Starting browser cache cleanup..."
 
             $browsers = @('Chrome', 'Firefox', 'Edge')
             foreach ($browser in $browsers) {
-                Write-Verbose "Überprüfe Installation von $browser..."
+                Write-Verbose "Checking installation of $browser..."
                 switch ($browser) {
                     'Chrome' {
                         $cachePath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache"
@@ -73,45 +73,45 @@ function Invoke-BrowserCacheCleanup {
                 if ($browser -eq 'Firefox' -and $cachePaths) {
                     foreach ($path in $cachePaths) {
                         if (Test-Path $path) {
-                            Write-Verbose "Bereinige Cache für $browser unter $path..."
-                            Write-Host "Bereinige Cache für $browser..."
+                            Write-Verbose "Cleaning cache for $browser at $path..."
+                            Write-Host "Cleaning cache for $browser..."
                             Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                            Write-Verbose "Cache für $browser bereinigt."
-                            "[$(Get-Date)] - Cache für $browser im Profil $_.Name bereinigt." | Add-Content -Path $LogFile
+                            Write-Verbose "Cache for $browser cleaned."
+                            "[$(Get-Date)] - Cache for $browser in profile $_.Name cleaned." | Add-Content -Path $LogFile
                         } else {
-                            $WarningMessage = "Cache-Pfad für $browser ($path) wurde nicht gefunden."
+                            $WarningMessage = "Cache path for $browser ($path) was not found."
                             Write-Warning $WarningMessage
-                            "[$(Get-Date)] - WARNUNG: $WarningMessage" | Add-Content -Path $LogFile
+                            "[$(Get-Date)] - WARNING: $WarningMessage" | Add-Content -Path $LogFile
                         }
                     }
                 } elseif ($cachePath -and (Test-Path $cachePath)) {
-                    Write-Verbose "Bereinige Cache für $browser unter $cachePath..."
-                    Write-Host "Bereinige Cache für $browser..."
+                    Write-Verbose "Cleaning cache for $browser at $cachePath..."
+                    Write-Host "Cleaning cache for $browser..."
                     Get-ChildItem -Path $cachePath -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                    Write-Verbose "Cache für $browser bereinigt."
-                    "[$(Get-Date)] - Cache für $browser bereinigt." | Add-Content -Path $LogFile
+                    Write-Verbose "Cache for $browser cleaned."
+                    "[$(Get-Date)] - Cache for $browser cleaned." | Add-Content -Path $LogFile
                 } else {
-                    $WarningMessage = "Cache-Pfad für $browser wurde nicht gefunden oder $browser ist nicht installiert."
+                    $WarningMessage = "Cache path for $browser was not found or $browser is not installed."
                     Write-Warning $WarningMessage
-                    "[$(Get-Date)] - WARNUNG: $WarningMessage" | Add-Content -Path $LogFile
+                    "[$(Get-Date)] - WARNING: $WarningMessage" | Add-Content -Path $LogFile
                 }
             }
 
-            Write-Verbose "Browser-Caches erfolgreich bereinigt."
-            Write-Host "Browser-Caches wurden erfolgreich bereinigt."
-            "[$(Get-Date)] - Browser-Caches erfolgreich bereinigt." | Add-Content -Path $LogFile
+            Write-Verbose "Browser caches cleaned successfully."
+            Write-Host "Browser caches have been cleaned successfully."
+            "[$(Get-Date)] - Browser caches cleaned successfully." | Add-Content -Path $LogFile
         }
         catch {
-            $ErrorMessage = "Fehler bei der Bereinigung der Browser-Caches: $($_.Exception.Message)"
+            $ErrorMessage = "Error during browser cache cleanup: $($_.Exception.Message)"
             Write-Error $ErrorMessage
-            "[$(Get-Date)] - FEHLER: $ErrorMessage" | Add-Content -Path $LogFile
+            "[$(Get-Date)] - ERROR: $ErrorMessage" | Add-Content -Path $LogFile
         }
     }
 
     end {
-        Write-Verbose "Browser-Cache-Bereinigungsprozess abgeschlossen."
-        Write-Host "Browser-Cache-Bereinigungsprozess abgeschlossen."
-        "[$(Get-Date)] - Browser-Cache-Bereinigungsprozess abgeschlossen." | Add-Content -Path $LogFile
-        Write-Verbose "Details finden Sie in der Logdatei: $LogFile"
+        Write-Verbose "Browser cache cleanup process completed."
+        Write-Host "Browser cache cleanup process completed."
+        "[$(Get-Date)] - Browser cache cleanup process completed." | Add-Content -Path $LogFile
+        Write-Verbose "Details can be found in the log file: $LogFile"
     }
 }
