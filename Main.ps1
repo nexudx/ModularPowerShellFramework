@@ -7,6 +7,7 @@
     Module werden aus dem 'Modules'-Unterverzeichnis relativ zum Speicherort des Skripts geladen.
     Beim Start wird ein Auswahlassistent angezeigt, mit dem der Benutzer ein Modul auswählen kann.
     Nach der Ausführung eines Moduls wird das aktuellste Log im Modulverzeichnis in der Konsole angezeigt.
+    Die Logrotation wird immer ausgeführt, nachdem ein Modul ein neues Log erstellt hat.
 
 .PARAMETER ModuleName
     Der Name des Moduls, das geladen werden soll (ohne die .psm1-Erweiterung).
@@ -26,7 +27,7 @@
     Lädt das 'DiskCheck'-Modul und führt es mit dem Parameter -Verbose aus.
 
 .NOTES
-    Teile dieses Skripts erfordern Administratorrechte. Die Anzeige des Logs nach der Modulverarbeitung erfordert keine erhöhten Rechte.
+    Teile dieses Skripts erfordern Administratorrechte. Die Anzeige des Logs und die Logrotation nach der Modulverarbeitung erfordern keine erhöhten Rechte.
 #>
 [CmdletBinding()]
 param(
@@ -155,14 +156,51 @@ function Invoke-ModuleExecution {
     catch {
         Write-Error "Ein Fehler ist aufgetreten: $_"
     }
-    finally {
-        # Log-Dateiverwaltung: Behalte nur die neuesten drei Log-Dateien für jedes Modul
-        Get-ChildItem -Path $ModulesPath -Recurse -Filter *.log |
-            Group-Object { $_.DirectoryName } |
-            ForEach-Object {
-                $logs = $_.Group | Sort-Object LastWriteTime -Descending
-                $logs | Select-Object -Skip 3 | Remove-Item -Force -ErrorAction SilentlyContinue
-            }
+}
+
+function Rotate-ModuleLogs {
+    <#
+    .SYNOPSIS
+        Führt die Logrotation für ein Modul aus.
+
+    .DESCRIPTION
+        Behalte nur die neuesten drei Log-Dateien für jedes Modul.
+
+    .PARAMETER ModuleName
+        Der Name des Moduls, dessen Logs rotiert werden sollen.
+
+    .EXAMPLE
+        Rotate-ModuleLogs -ModuleName "DiskCleanup"
+
+        Führt die Logrotation für das Modul 'DiskCleanup' aus.
+
+    .NOTES
+        Diese Funktion erfordert keine Administratorrechte.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ModuleName
+    )
+
+    try {
+        $ModuleDirectory = Join-Path $ModulesPath $ModuleName
+
+        if (-not (Test-Path $ModuleDirectory)) {
+            Write-Warning "Modulverzeichnis nicht gefunden: $ModuleDirectory"
+            return
+        }
+
+        $Logs = Get-ChildItem -Path $ModuleDirectory -Filter '*.log' |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -Skip 3
+
+        if ($Logs) {
+            $Logs | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+    }
+    catch {
+        Write-Error "Fehler bei der Logrotation: $_"
     }
 }
 
@@ -206,19 +244,18 @@ try {
 
         # Skript in erhöhter Sitzung neu starten und Parameter übergeben
         Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait
-
-        # Nach Abschluss des erhöhten Prozesses das neueste Modul-Log anzeigen
-        Show-LatestModuleLog -ModuleName $ModuleName
-        exit
     }
     else {
         # Modul ausführen
         Invoke-ModuleExecution -ModuleName $ModuleName -ModuleParameters $ModuleParameters
-
-        # Nach Abschluss des Moduls das neueste Modul-Log anzeigen
-        Show-LatestModuleLog -ModuleName $ModuleName
-        exit
     }
+
+    # Logrotation nach Modulausführung durchführen
+    Rotate-ModuleLogs -ModuleName $ModuleName
+
+    # Nach der Logrotation das aktuellste Log anzeigen
+    Show-LatestModuleLog -ModuleName $ModuleName
+
 }
 catch {
     Write-Error "Ein Fehler ist aufgetreten: $_"
