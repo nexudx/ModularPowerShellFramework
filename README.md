@@ -17,6 +17,8 @@ A robust, modular PowerShell framework designed for system maintenance and admin
 - **BrowserCacheCleanup**: Cleans browser cache files
 - **DiskCheck**: Performs comprehensive disk health analysis
 - **DiskCleanup**: Manages disk space by cleaning unnecessary files
+- **PerformanceOptimization**: Provides system performance optimization with monitoring and analysis
+- **ServiceStatusMonitor**: Tracks Windows service status changes with comprehensive monitoring
 - **TempFileCleanup**: Removes temporary system files
 - **WindowsUpdate**: Manages Windows Update operations
 
@@ -65,6 +67,24 @@ Execute a specific module with parameters:
 .\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-RepairMode", "-VerboseOutput", "-TargetDrives", "C:", "D:")
 ```
 
+#### ServiceStatusMonitor Module
+```powershell
+# Monitor all services
+.\Main.ps1 -ModuleName "ServiceStatusMonitor"
+
+# Monitor specific services with verbose output
+.\Main.ps1 -ModuleName "ServiceStatusMonitor" -ModuleParameters @("-TargetServices", "wuauserv,spooler", "-VerboseOutput")
+```
+
+#### PerformanceOptimization Module
+```powershell
+# Basic performance optimization
+.\Main.ps1 -ModuleName "PerformanceOptimization"
+
+# Optimize specific areas with verbose output
+.\Main.ps1 -ModuleName "PerformanceOptimization" -ModuleParameters @("-Areas", "CPU,Memory,Network", "-VerboseOutput")
+```
+
 ## Framework Architecture
 
 ### Directory Structure
@@ -75,6 +95,8 @@ ModularPowerShellFramework/
 │   ├── BrowserCacheCleanup/
 │   ├── DiskCheck/
 │   ├── DiskCleanup/
+│   ├── PerformanceOptimization/
+│   ├── ServiceStatusMonitor/
 │   ├── TempFileCleanup/
 │   └── WindowsUpdate/
 └── Logs/                    # Framework logs
@@ -86,6 +108,7 @@ Each module follows a consistent structure:
 ModuleName/
 ├── ModuleName.psd1         # Module manifest
 ├── ModuleName.psm1         # Module implementation
+├── README.md               # Module documentation
 └── Logs/                   # Module-specific logs
 ```
 
