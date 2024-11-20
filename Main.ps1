@@ -39,8 +39,9 @@ param(
 )
 
 # Global variables
-$ModulesPath = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) "Modules"
-$FrameworkLogDir = Join-Path $PSScriptRoot "Logs"
+$script:ModulesPath = Join-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) "Modules"
+$script:FrameworkLogDir = Join-Path $PSScriptRoot "Logs"
+$script:OriginalPSModulePath = $env:PSModulePath
 
 # Create framework log directory if it doesn't exist
 if (-not (Test-Path $FrameworkLogDir)) {
@@ -48,12 +49,20 @@ if (-not (Test-Path $FrameworkLogDir)) {
 }
 
 # Use a single rolling log file instead of timestamp-based files
-$FrameworkLogFile = Join-Path $FrameworkLogDir "Framework.log"
+$script:FrameworkLogFile = Join-Path $FrameworkLogDir "Framework.log"
 
 function Write-FrameworkLog {
-    param([string]$Message)
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Message,
+        
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Information', 'Warning', 'Error')]
+        [string]$Severity = 'Information'
+    )
     
-    $LogMessage = "[$(Get-Date)] - $Message"
+    $LogMessage = "[$(Get-Date)] [$Severity] - $Message"
     
     # Create the log file if it doesn't exist
     if (-not (Test-Path $FrameworkLogFile)) {
@@ -62,20 +71,34 @@ function Write-FrameworkLog {
         return
     }
     
-    # Get current log content
-    $logContent = @(Get-Content -Path $FrameworkLogFile)
+    # Get current log content with thread-safe file access
+    $mutex = New-Object System.Threading.Mutex($false, "GlobalFrameworkLogMutex")
+    $mutex.WaitOne() | Out-Null
     
-    # Add new message to the beginning of the array
-    $logContent = @($LogMessage) + $logContent
-    
-    # Keep only the last 42 lines
-    if ($logContent.Count -gt 42) {
-        $logContent = $logContent[0..41]
+    try {
+        $logContent = @(Get-Content -Path $FrameworkLogFile)
+        
+        # Add new message to the beginning of the array
+        $logContent = @($LogMessage) + $logContent
+        
+        # Keep only the last 42 lines
+        if ($logContent.Count -gt 42) {
+            $logContent = $logContent[0..41]
+        }
+        
+        # Write updated content back to file
+        $logContent | Set-Content -Path $FrameworkLogFile
+    }
+    finally {
+        $mutex.ReleaseMutex()
     }
     
-    # Write updated content back to file
-    $logContent | Set-Content -Path $FrameworkLogFile
-    Write-Verbose $Message
+    # Output to console based on severity
+    switch ($Severity) {
+        'Warning' { Write-Warning $Message }
+        'Error' { Write-Error $Message }
+        default { Write-Verbose $Message }
+    }
 }
 
 function Test-ModuleHealth {
@@ -86,6 +109,7 @@ function Test-ModuleHealth {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ModuleName
     )
 
@@ -96,13 +120,30 @@ function Test-ModuleHealth {
         $psd1Path = Join-Path $modulePath "$ModuleName.psd1"
         $psm1Path = Join-Path $modulePath "$ModuleName.psm1"
 
+        # Check module directory
+        if (-not (Test-Path $modulePath)) {
+            throw "Module directory not found: $modulePath"
+        }
+
         # Check module files
-        if (-not (Test-Path $psd1Path) -or -not (Test-Path $psm1Path)) {
-            throw "Module files missing or incomplete"
+        if (-not (Test-Path $psd1Path)) {
+            throw "Module manifest not found: $psd1Path"
+        }
+        
+        if (-not (Test-Path $psm1Path)) {
+            throw "Module script not found: $psm1Path"
         }
 
         # Check module manifest
-        $manifest = Import-PowerShellDataFile -Path $psd1Path
+        $manifest = Import-PowerShellDataFile -Path $psd1Path -ErrorAction Stop
+        
+        # Validate manifest required fields
+        $requiredFields = @('ModuleVersion', 'Author', 'Description')
+        foreach ($field in $requiredFields) {
+            if (-not $manifest.ContainsKey($field)) {
+                throw "Module manifest missing required field: $field"
+            }
+        }
         
         # Verify required directories
         $logDir = Join-Path $modulePath "Logs"
@@ -110,10 +151,18 @@ function Test-ModuleHealth {
             New-Item -ItemType Directory -Path $logDir | Out-Null
         }
 
-        return $true
+        # Verify module can be imported
+        try {
+            Import-Module $psm1Path -Force -ErrorAction Stop
+            Remove-Module $ModuleName -Force -ErrorAction SilentlyContinue
+            return $true
+        }
+        catch {
+            throw "Module import test failed: $_"
+        }
     }
     catch {
-        Write-FrameworkLog "Module health check failed: $_"
+        Write-FrameworkLog "Module health check failed: $_" -Severity 'Error'
         return $false
     }
 }
@@ -126,12 +175,18 @@ function Show-ModuleOutput {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ModuleName
     )
 
     try {
         $moduleLogDir = Join-Path $ModulesPath "$ModuleName\Logs"
         
+        if (-not (Test-Path $moduleLogDir)) {
+            Write-FrameworkLog "Module log directory not found: $moduleLogDir" -Severity 'Warning'
+            return
+        }
+
         # Get latest log file
         $latestLog = Get-ChildItem -Path $moduleLogDir -Filter "*.log" |
             Sort-Object LastWriteTime -Descending |
@@ -141,9 +196,48 @@ function Show-ModuleOutput {
             Write-Host "`nModule Log Output:" -ForegroundColor Cyan
             Get-Content -Path $latestLog.FullName | Write-Host
         }
+        else {
+            Write-FrameworkLog "No log files found in $moduleLogDir" -Severity 'Warning'
+        }
     }
     catch {
-        Write-Error "Error displaying module output: $_"
+        Write-FrameworkLog "Error displaying module output: $_" -Severity 'Error'
+    }
+}
+
+function Update-PSModulePath {
+    <#
+    .SYNOPSIS
+        Updates PSModulePath safely without duplicates.
+    #>
+    [CmdletBinding()]
+    param()
+    
+    try {
+        $paths = $env:PSModulePath -split ';'
+        if ($paths -notcontains $ModulesPath) {
+            $env:PSModulePath = "$ModulesPath;$env:PSModulePath"
+        }
+    }
+    catch {
+        Write-FrameworkLog "Error updating PSModulePath: $_" -Severity 'Error'
+        throw
+    }
+}
+
+function Restore-PSModulePath {
+    <#
+    .SYNOPSIS
+        Restores original PSModulePath.
+    #>
+    [CmdletBinding()]
+    param()
+    
+    try {
+        $env:PSModulePath = $script:OriginalPSModulePath
+    }
+    catch {
+        Write-FrameworkLog "Error restoring PSModulePath: $_" -Severity 'Error'
     }
 }
 
@@ -155,6 +249,7 @@ function Invoke-ModuleExecution {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ModuleName,
 
         [Parameter(Mandatory = $false)]
@@ -165,7 +260,7 @@ function Invoke-ModuleExecution {
         Write-FrameworkLog "Starting module execution: $ModuleName"
 
         # Update PSModulePath
-        $env:PSModulePath = "$ModulesPath;$env:PSModulePath"
+        Update-PSModulePath
 
         # Import module
         Import-Module $ModuleName -Force -ErrorAction Stop
@@ -187,6 +282,13 @@ function Invoke-ModuleExecution {
             }
         }
 
+        # Validate special parameters
+        if ($paramList.ContainsKey('ScheduleReboot')) {
+            if (-not [DateTime]::TryParse($paramList['ScheduleReboot'], [ref]$null)) {
+                throw "Invalid ScheduleReboot time format. Use 'HH:mm' format."
+            }
+        }
+
         # Start execution timer
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
@@ -200,23 +302,29 @@ function Invoke-ModuleExecution {
         return $true
     }
     catch {
-        Write-FrameworkLog "Module execution failed: $_"
+        Write-FrameworkLog "Module execution failed: $_" -Severity 'Error'
         Write-Error "Module execution failed: $_"
         return $false
+    }
+    finally {
+        # Restore original PSModulePath
+        Restore-PSModulePath
     }
 }
 
 function Rotate-ModuleLogs {
     <#
     .SYNOPSIS
-        Enhanced log rotation.
+        Enhanced log rotation with error handling.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
         [string]$ModuleName,
 
         [Parameter(Mandatory = $false)]
+        [ValidateRange(1, 100)]
         [int]$RetainCount = 3
     )
 
@@ -227,18 +335,33 @@ function Rotate-ModuleLogs {
             return
         }
 
-        # Rotate logs
-        $files = Get-ChildItem -Path $moduleLogDir -Filter "*.log" |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -Skip $RetainCount
+        # Rotate logs with exclusive file access
+        $mutex = New-Object System.Threading.Mutex($false, "Global$($ModuleName)LogMutex")
+        $mutex.WaitOne() | Out-Null
 
-        if ($files) {
-            $files | Remove-Item -Force -ErrorAction SilentlyContinue
-            Write-FrameworkLog "Rotated $($files.Count) log files for $ModuleName"
+        try {
+            $files = Get-ChildItem -Path $moduleLogDir -Filter "*.log" |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -Skip $RetainCount
+
+            if ($files) {
+                foreach ($file in $files) {
+                    try {
+                        Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                    }
+                    catch {
+                        Write-FrameworkLog "Failed to remove log file $($file.Name): $_" -Severity 'Warning'
+                    }
+                }
+                Write-FrameworkLog "Rotated $($files.Count) log files for $ModuleName"
+            }
+        }
+        finally {
+            $mutex.ReleaseMutex()
         }
     }
     catch {
-        Write-FrameworkLog "Error during log rotation: $_"
+        Write-FrameworkLog "Error during log rotation: $_" -Severity 'Error'
     }
 }
 
@@ -283,12 +406,20 @@ try {
         # Prepare elevation arguments
         $argList = "-ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -ModuleName `"$ModuleName`""
         if ($ModuleParameters) {
-            $paramStr = $ModuleParameters | ForEach-Object { "`"$_`"" } -join ' '
+            $paramStr = $ModuleParameters | ForEach-Object { 
+                # Properly escape special characters in parameters
+                $param = $_.Replace('"', '\"').Replace('`', '``')
+                "`"$param`""
+            } -join ' '
             $argList += " -ModuleParameters $paramStr"
         }
 
         # Restart with elevation
-        Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait
+        $process = Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait -PassThru
+
+        if ($process.ExitCode -ne 0) {
+            Write-FrameworkLog "Elevated process failed with exit code: $($process.ExitCode)" -Severity 'Error'
+        }
 
         # Show output after elevated process completes
         Show-ModuleOutput -ModuleName $ModuleName
@@ -307,9 +438,12 @@ try {
     }
 }
 catch {
-    Write-FrameworkLog "Critical error: $_"
+    Write-FrameworkLog "Critical error: $_" -Severity 'Error'
     Write-Error "Critical error: $_"
+    exit 1
 }
 finally {
     Write-FrameworkLog "Framework execution completed"
+    # Ensure PSModulePath is restored
+    Restore-PSModulePath
 }
