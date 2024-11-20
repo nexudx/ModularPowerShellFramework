@@ -17,6 +17,17 @@ A robust, modular PowerShell framework designed for system maintenance and admin
 
 ## Available Modules
 
+### Common
+Core module providing shared functionality across all modules:
+```powershell
+# Common module is automatically imported by other modules
+# Contains shared utilities for:
+# - Logging
+# - Error handling
+# - Parameter validation
+# - Performance monitoring
+```
+
 ### BrowserCacheCleanup
 Efficiently manages browser cache files across multiple browsers:
 ```powershell
@@ -117,10 +128,13 @@ cd ModularPowerShellFramework
 ```
 ModularPowerShellFramework/
 ├── Main.ps1                 # Main framework script
+├── docs/                    # Documentation
+│   └── static/             # Static assets for documentation
+│       └── img/            # Documentation images
 ├── Modules/                 # Module directory
 │   ├── Common/             # Shared functionality
-│   │   ├── Logging.psm1    # Common logging functions
-│   │   └── Utilities.psm1  # Shared utilities
+│   │   ├── Common.psd1     # Common module manifest
+│   │   └── Common.psm1     # Common module implementation
 │   ├── BrowserCacheCleanup/
 │   ├── DiskCheck/
 │   ├── DiskCleanup/
@@ -139,10 +153,23 @@ ModuleName/
 ├── ModuleName.psm1         # Module implementation
 ├── README.md               # Module documentation
 ├── Tests/                  # Module tests
-│   ├── Unit/              # Unit tests
-│   └── Integration/       # Integration tests
 └── Logs/                  # Module-specific logs
 ```
+
+## Module Dependencies
+
+The framework uses a hierarchical dependency structure:
+
+1. **Common Module**: Base dependency for all modules
+   - Provides core logging functionality
+   - Implements shared error handling
+   - Offers utility functions
+   - Manages performance monitoring
+
+2. **Module Dependencies**:
+   - DiskCleanup depends on DiskCheck for space analysis
+   - PerformanceOptimization uses ServiceStatusMonitor for service management
+   - WindowsUpdate requires elevated privileges managed by Common
 
 ## Creating New Modules
 
@@ -158,6 +185,7 @@ ModuleName/
     Author = 'Your Name'
     Description = 'Module description'
     PowerShellVersion = '5.1'
+    RequiredModules = @('Common')  # Add module dependencies
     PrivateData = @{
         PSData = @{
             Tags = @('Tag1', 'Tag2')
@@ -177,6 +205,9 @@ function Invoke-ModuleName {
     )
 
     begin {
+        # Import required modules
+        Import-Module -Name Common
+
         # Initialize logging
         $ModuleLogDir = Join-Path $PSScriptRoot "Logs"
         if (-not (Test-Path $ModuleLogDir)) {
@@ -228,6 +259,29 @@ Export-ModuleMember -Function Invoke-ModuleName
    - Validate input data
    - Handle credentials securely
    - Implement least privilege principle
+
+## Contributing
+
+1. **Fork the Repository**
+   - Create your feature branch
+   - Follow the existing module structure
+   - Maintain consistent naming conventions
+
+2. **Development Guidelines**
+   - Write comprehensive tests
+   - Update module documentation
+   - Follow PowerShell best practices
+   - Use the Common module for shared functionality
+
+3. **Submit Changes**
+   - Create detailed pull requests
+   - Include test results
+   - Update relevant documentation
+
+4. **Code Review**
+   - Address review comments
+   - Ensure all tests pass
+   - Verify documentation accuracy
 
 ## License
 
