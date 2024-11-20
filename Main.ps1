@@ -133,14 +133,14 @@ try {
         $selectedModules = @()
         do {
             Write-Host "`nSelect modules to run (comma-separated numbers, e.g. '1,3,4' or 'all' for all modules):"
-            $input = Read-Host
+            $userSelection = Read-Host
             
-            if ($input.ToLower() -eq 'all') {
+            if ($userSelection.ToLower() -eq 'all') {
                 $selectedModules = $availableModules
                 break
             }
             
-            $selections = $input -split ',' | ForEach-Object { $_.Trim() }
+            $selections = $userSelection -split ',' | ForEach-Object { $_.Trim() }
             $selectedModules = foreach ($sel in $selections) {
                 $index = [int]$sel - 1
                 if ($index -ge 0 -and $index -lt $availableModules.Count) {
