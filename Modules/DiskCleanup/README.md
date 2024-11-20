@@ -1,13 +1,5 @@
 # DiskCleanup PowerShell Module
 
-## Navigation
-- [🏠 Main Documentation](../../README.md)
-- Other Modules:
-  - [🌐 BrowserCacheCleanup](../BrowserCacheCleanup/README.md)
-  - [💽 DiskCheck](../DiskCheck/README.md)
-  - [🗑️ TempFileCleanup](../TempFileCleanup/README.md)
-  - [🔄 WindowsUpdate](../WindowsUpdate/README.md)
-
 ## Overview
 The DiskCleanup module provides streamlined disk cleanup operations for Windows systems. It performs essential cleanup tasks to free up disk space by removing temporary files, cleaning downloads, emptying the recycle bin, and managing Windows Update files.
 

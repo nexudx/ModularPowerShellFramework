@@ -1,13 +1,5 @@
 # TempFileCleanup PowerShell Module
 
-## Navigation
-- [🏠 Main Documentation](../../README.md)
-- Other Modules:
-  - [🌐 BrowserCacheCleanup](../BrowserCacheCleanup/README.md)
-  - [💽 DiskCheck](../DiskCheck/README.md)
-  - [🧹 DiskCleanup](../DiskCleanup/README.md)
-  - [🔄 WindowsUpdate](../WindowsUpdate/README.md)
-
 ## Overview
 The TempFileCleanup module provides comprehensive temporary file cleanup capabilities with advanced filtering, reporting, and logging features. It targets multiple temporary file locations across the Windows system and offers detailed insights into the cleanup process.
 

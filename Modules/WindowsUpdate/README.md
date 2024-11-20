@@ -1,13 +1,5 @@
 # WindowsUpdate PowerShell Module
 
-## Navigation
-- [🏠 Main Documentation](../../README.md)
-- Other Modules:
-  - [🌐 BrowserCacheCleanup](../BrowserCacheCleanup/README.md)
-  - [💽 DiskCheck](../DiskCheck/README.md)
-  - [🧹 DiskCleanup](../DiskCleanup/README.md)
-  - [🗑️ TempFileCleanup](../TempFileCleanup/README.md)
-
 ## Overview
 The WindowsUpdate module provides enhanced Windows Update management capabilities with advanced filtering, reporting, and control features. It offers comprehensive update management including categorization, bandwidth control, and detailed reporting.
 

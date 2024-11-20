@@ -14,11 +14,11 @@ A robust, modular PowerShell framework designed for system maintenance and admin
 
 ## Available Modules
 
-- [**BrowserCacheCleanup**](Modules/BrowserCacheCleanup/README.md): Cleans browser cache files
-- [**DiskCheck**](Modules/DiskCheck/README.md): Performs comprehensive disk health analysis
-- [**DiskCleanup**](Modules/DiskCleanup/README.md): Manages disk space by cleaning unnecessary files
-- [**TempFileCleanup**](Modules/TempFileCleanup/README.md): Removes temporary system files
-- [**WindowsUpdate**](Modules/WindowsUpdate/README.md): Manages Windows Update operations
+- **BrowserCacheCleanup**: Cleans browser cache files
+- **DiskCheck**: Performs comprehensive disk health analysis
+- **DiskCleanup**: Manages disk space by cleaning unnecessary files
+- **TempFileCleanup**: Removes temporary system files
+- **WindowsUpdate**: Manages Windows Update operations
 
 ## Requirements
 
