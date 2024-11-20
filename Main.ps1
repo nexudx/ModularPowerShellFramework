@@ -47,12 +47,34 @@ if (-not (Test-Path $FrameworkLogDir)) {
     New-Item -ItemType Directory -Path $FrameworkLogDir | Out-Null
 }
 
-$FrameworkLogFile = Join-Path $FrameworkLogDir "Framework_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+# Use a single rolling log file instead of timestamp-based files
+$FrameworkLogFile = Join-Path $FrameworkLogDir "Framework.log"
 
 function Write-FrameworkLog {
     param([string]$Message)
+    
     $LogMessage = "[$(Get-Date)] - $Message"
-    $LogMessage | Add-Content -Path $FrameworkLogFile
+    
+    # Create the log file if it doesn't exist
+    if (-not (Test-Path $FrameworkLogFile)) {
+        $LogMessage | Set-Content -Path $FrameworkLogFile
+        Write-Verbose $Message
+        return
+    }
+    
+    # Get current log content
+    $logContent = @(Get-Content -Path $FrameworkLogFile)
+    
+    # Add new message to the beginning of the array
+    $logContent = @($LogMessage) + $logContent
+    
+    # Keep only the last 42 lines
+    if ($logContent.Count -gt 42) {
+        $logContent = $logContent[0..41]
+    }
+    
+    # Write updated content back to file
+    $logContent | Set-Content -Path $FrameworkLogFile
     Write-Verbose $Message
 }
 
