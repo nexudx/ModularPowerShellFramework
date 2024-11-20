@@ -117,7 +117,7 @@ function Show-ModuleOutput {
 
         if ($latestLog) {
             Write-Host "`nModule Log Output:" -ForegroundColor Cyan
-            Get-Content -Path $latestLog.FullName
+            Get-Content -Path $latestLog.FullName | Write-Host
         }
 
         # Check for HTML report
@@ -282,6 +282,9 @@ try {
 
         # Restart with elevation
         Start-Process powershell.exe -ArgumentList $argList -Verb RunAs -Wait
+
+        # Show output after elevated process completes
+        Show-ModuleOutput -ModuleName $ModuleName
     }
     else {
         # Execute module
