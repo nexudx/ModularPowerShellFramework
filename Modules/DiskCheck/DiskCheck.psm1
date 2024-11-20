@@ -1,15 +1,13 @@
 <#
 .SYNOPSIS
-    Enhanced disk health check and analysis with detailed reporting.
+    Enhanced disk health check and analysis.
 
 .DESCRIPTION
     This optimized module performs comprehensive disk health analysis including:
-    - SMART data analysis
-    - Disk performance metrics
-    - Space utilization
-    - File system health
+    - Disk space utilization
+    - Volume health status
+    - File system information
     - Multiple drive support
-    - Detailed HTML reporting
 
 .PARAMETER RepairMode
     Enables repair mode to automatically fix found errors.
@@ -18,21 +16,15 @@
     Enables verbose console output.
 
 .PARAMETER TargetDrives
-    Array of specific drive letters to check. If omitted, checks all drives.
-
-.PARAMETER GenerateReport
-    Generates a detailed HTML report of findings.
-
-.PARAMETER SkipSMART
-    Skips SMART data analysis for faster execution.
+    Array of specific drive letters to check. If omitted, checks all fixed drives.
 
 .EXAMPLE
     Invoke-DiskCheck
     Performs a basic disk check on all drives.
 
 .EXAMPLE
-    Invoke-DiskCheck -RepairMode -VerboseOutput -TargetDrives "C:", "D:" -GenerateReport
-    Performs detailed analysis on C: and D: drives with repair mode and generates HTML report.
+    Invoke-DiskCheck -RepairMode -VerboseOutput -TargetDrives "C:", "D:"
+    Performs detailed analysis on C: and D: drives with repair mode.
 
 .NOTES
     Requires Administrator privileges for full functionality.
@@ -51,15 +43,7 @@ function Invoke-DiskCheck {
 
         [Parameter(Mandatory = $false,
                    HelpMessage = "Specific drives to check")]
-        [string[]]$TargetDrives,
-
-        [Parameter(Mandatory = $false,
-                   HelpMessage = "Generate HTML report")]
-        [switch]$GenerateReport,
-
-        [Parameter(Mandatory = $false,
-                   HelpMessage = "Skip SMART analysis")]
-        [switch]$SkipSMART
+        [string[]]$TargetDrives
     )
 
     begin {
@@ -78,7 +62,6 @@ function Invoke-DiskCheck {
 
         # Initialize log file in module directory
         $LogFile = Join-Path $ModuleDir "DiskCheck_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        $ReportFile = Join-Path $ModuleDir "DiskCheck_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
 
         function Write-Log {
             param([string]$Message)
@@ -87,45 +70,56 @@ function Invoke-DiskCheck {
             Write-Verbose $Message
         }
 
-        function Get-SMARTData {
-            param([string]$DriveLetter)
-            try {
-                $diskNumber = (Get-Partition -DriveLetter $DriveLetter[0]).DiskNumber
-                $smartData = Get-WmiObject -Namespace root\wmi -Class MSStorageDriver_FailurePredictStatus -ErrorAction Stop |
-                    Where-Object { $_.InstanceName -match "PHYSICALDRIVE$diskNumber$" }
-                return $smartData
-            }
-            catch {
-                Write-Log "Unable to retrieve SMART data for drive $DriveLetter`: $_"
-                return $null
+        function Get-MediaTypeString {
+            param([string]$MediaType)
+            switch ($MediaType) {
+                0 { "Unspecified" }
+                3 { "HDD" }
+                4 { "SSD" }
+                5 { "SCM" }
+                default { $MediaType }
             }
         }
 
-        function Get-DiskPerformanceMetrics {
+        function Get-DriveInfo {
             param([string]$DriveLetter)
             try {
-                $counter = Get-Counter -Counter "\PhysicalDisk(*)\Disk Reads/sec", "\PhysicalDisk(*)\Disk Writes/sec" -ErrorAction Stop
-                return $counter
-            }
-            catch {
-                Write-Log "Unable to retrieve performance metrics for drive $DriveLetter`: $_"
-                return $null
-            }
-        }
+                # Get basic volume information
+                $volume = Get-Volume -DriveLetter $DriveLetter[0] -ErrorAction Stop
+                
+                # Get corresponding disk information
+                $partition = $volume | Get-Partition
+                $disk = $partition | Get-Disk
 
-        function Get-DiskSpaceAnalysis {
-            param([string]$DriveLetter)
-            try {
-                $drive = Get-PSDrive -Name $DriveLetter[0] -ErrorAction Stop
+                # Get physical disk for additional properties
+                $physicalDisk = Get-PhysicalDisk -DeviceNumber $disk.Number
+
                 return @{
-                    TotalSize = $drive.Free + $drive.Used
-                    FreeSpace = $drive.Free
-                    UsedSpace = $drive.Used
-                    PercentFree = [math]::Round(($drive.Free / ($drive.Free + $drive.Used)) * 100, 2)
+                    Volume = @{
+                        DriveLetter = $volume.DriveLetter
+                        Label = $volume.FileSystemLabel
+                        FileSystem = $volume.FileSystem
+                        HealthStatus = $volume.HealthStatus
+                        SizeTotal = $volume.Size
+                        SizeFree = $volume.SizeRemaining
+                        SizeUsed = ($volume.Size - $volume.SizeRemaining)
+                        PercentFree = [math]::Round(($volume.SizeRemaining / $volume.Size) * 100, 2)
+                    }
+                    Disk = @{
+                        Number = $disk.Number
+                        Model = $physicalDisk.Model
+                        MediaType = (Get-MediaTypeString $physicalDisk.MediaType)
+                        BusType = $disk.BusType
+                        HealthStatus = $disk.HealthStatus
+                        OperationalStatus = $disk.OperationalStatus
+                        Size = $disk.Size
+                        PartitionStyle = $disk.PartitionStyle
+                        FirmwareVersion = $physicalDisk.FirmwareVersion
+                    }
                 }
             }
             catch {
-                Write-Log "Unable to analyze disk space for drive $DriveLetter`: $_"
+                Write-Log "Unable to get drive information for $DriveLetter`: $_"
                 return $null
             }
         }
@@ -143,7 +137,7 @@ function Invoke-DiskCheck {
 
                 $arguments = "$DriveLetter /scan"
                 if ($Repair) {
-                    $arguments += " /f /r"
+                    $arguments += " /f"
                 }
 
                 $processInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -170,130 +164,55 @@ function Invoke-DiskCheck {
                 }
             }
         }
-
-        function New-HTMLReport {
-            param([hashtable]$Results)
-            $html = @"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Disk Check Report - $(Get-Date -Format 'yyyy-MM-dd HH:mm')</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { background-color: #f0f0f0; padding: 10px; }
-        .drive { margin: 20px 0; border: 1px solid #ddd; padding: 10px; }
-        .warning { color: orange; }
-        .error { color: red; }
-        .success { color: green; }
-        .metric { margin: 10px 0; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f0f0f0; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Disk Check Report</h1>
-        <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm')</p>
-    </div>
-"@
-            foreach ($drive in $Results.GetEnumerator()) {
-                $html += @"
-    <div class="drive">
-        <h2>Drive $($drive.Key)</h2>
-        <div class="metric">
-            <h3>Disk Space</h3>
-            <table>
-                <tr><th>Total Size</th><td>$([math]::Round($drive.Value.Space.TotalSize/1GB, 2)) GB</td></tr>
-                <tr><th>Free Space</th><td>$([math]::Round($drive.Value.Space.FreeSpace/1GB, 2)) GB</td></tr>
-                <tr><th>Used Space</th><td>$([math]::Round($drive.Value.Space.UsedSpace/1GB, 2)) GB</td></tr>
-                <tr><th>Percent Free</th><td>$($drive.Value.Space.PercentFree)%</td></tr>
-            </table>
-        </div>
-"@
-                if ($drive.Value.SMART) {
-                    $html += @"
-        <div class="metric">
-            <h3>SMART Status</h3>
-            <p class="$($drive.Value.SMART.PredictFailure ? 'error' : 'success')">
-                Prediction Status: $($drive.Value.SMART.PredictFailure ? 'Warning' : 'Healthy')
-            </p>
-        </div>
-"@
-                }
-
-                if ($drive.Value.ChkDsk) {
-                    $html += @"
-        <div class="metric">
-            <h3>CHKDSK Results</h3>
-            <p class="$($drive.Value.ChkDsk.Success ? 'success' : 'error')">
-                Status: $($drive.Value.ChkDsk.Success ? 'Passed' : 'Failed')
-            </p>
-        </div>
-"@
-                }
-                $html += "</div>"
-            }
-            $html += "</body></html>"
-            $html | Out-File -FilePath $ReportFile -Encoding UTF8
-        }
     }
 
     process {
         try {
-            Write-Log "Starting enhanced disk check..."
+            Write-Log "Starting disk check..."
             
-            # Get all drives if none specified
+            # Get all fixed drives if none specified
             if (-not $TargetDrives) {
-                $TargetDrives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name | ForEach-Object { "$_`:" }
+                $TargetDrives = Get-Volume | 
+                    Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' } |
+                    Select-Object -ExpandProperty DriveLetter |
+                    ForEach-Object { "$_`:" }
             }
-
-            $results = @{}
 
             foreach ($drive in $TargetDrives) {
                 Write-Log "Analyzing drive $drive..."
-                $driveResults = @{}
+                
+                # Get drive information
+                $driveInfo = Get-DriveInfo -DriveLetter $drive
+                
+                if ($driveInfo) {
+                    # Run chkdsk if repair mode enabled
+                    if ($RepairMode) {
+                        Write-Log "Running chkdsk on $drive..."
+                        $driveInfo.ChkDsk = Invoke-ChkDsk -DriveLetter $drive -Repair
+                    }
 
-                # Get disk space analysis
-                Write-Log "Getting disk space analysis for $drive..."
-                $driveResults.Space = Get-DiskSpaceAnalysis -DriveLetter $drive
+                    # Output summary
+                    $summary = @"
 
-                # Get SMART data if enabled
-                if (-not $SkipSMART) {
-                    Write-Log "Getting SMART data for $drive..."
-                    $driveResults.SMART = Get-SMARTData -DriveLetter $drive
-                }
-
-                # Get performance metrics
-                Write-Log "Getting performance metrics for $drive..."
-                $driveResults.Performance = Get-DiskPerformanceMetrics -DriveLetter $drive
-
-                # Run chkdsk if repair mode enabled
-                if ($RepairMode) {
-                    Write-Log "Running chkdsk on $drive..."
-                    $driveResults.ChkDsk = Invoke-ChkDsk -DriveLetter $drive -Repair
-                }
-
-                $results[$drive] = $driveResults
-            }
-
-            # Generate HTML report if requested
-            if ($GenerateReport) {
-                Write-Log "Generating HTML report..."
-                New-HTMLReport -Results $results
-                Write-Host "HTML report generated at: $ReportFile"
-            }
-
-            # Output summary
-            foreach ($drive in $results.GetEnumerator()) {
-                $summary = @"
-Drive $($drive.Key) Summary:
+Drive $drive Summary:
 -------------------------
-Space: $([math]::Round($drive.Value.Space.FreeSpace/1GB, 2))GB free of $([math]::Round($drive.Value.Space.TotalSize/1GB, 2))GB
-Health: $(if($drive.Value.SMART){"SMART Status: $($drive.Value.SMART.PredictFailure ? 'Warning' : 'Healthy')"} else {"SMART data not available"})
+Label: $($driveInfo.Volume.Label)
+File System: $($driveInfo.Volume.FileSystem)
+Health Status: $($driveInfo.Volume.HealthStatus)
+Space: $([math]::Round($driveInfo.Volume.SizeFree/1GB, 2))GB free of $([math]::Round($driveInfo.Volume.SizeTotal/1GB, 2))GB ($($driveInfo.Volume.PercentFree)% free)
+Disk Model: $($driveInfo.Disk.Model)
+Media Type: $($driveInfo.Disk.MediaType)
+Bus Type: $($driveInfo.Disk.BusType)
+Disk Health: $($driveInfo.Disk.HealthStatus)
+Firmware Version: $($driveInfo.Disk.FirmwareVersion)
 "@
-                Write-Host $summary
-                Write-Log $summary
+                    if ($driveInfo.ChkDsk) {
+                        $summary += "`nChkDsk Status: $(if ($driveInfo.ChkDsk.Success) { 'Passed' } else { 'Failed' })"
+                    }
+
+                    Write-Host $summary
+                    Write-Log $summary
+                }
             }
         }
         catch {
@@ -304,10 +223,7 @@ Health: $(if($drive.Value.SMART){"SMART Status: $($drive.Value.SMART.PredictFail
     }
 
     end {
-        $summary = "Disk check completed. Log file: $LogFile"
-        if ($GenerateReport) {
-            $summary += "`nReport file: $ReportFile"
-        }
+        $summary = "`nDisk check completed. Log file: $LogFile"
         Write-Log $summary
         Write-Host $summary
     }
