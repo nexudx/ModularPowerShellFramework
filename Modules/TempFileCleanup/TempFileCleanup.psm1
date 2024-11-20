@@ -9,7 +9,6 @@
     - Exclusion patterns
     - Parallel processing
     - Space usage tracking
-    - HTML reporting
     - Detailed logging
 
 .PARAMETER VerboseOutput
@@ -24,9 +23,6 @@
 .PARAMETER ExcludePatterns
     Array of patterns to exclude from cleanup.
 
-.PARAMETER GenerateReport
-    Generates a detailed HTML report of cleanup results.
-
 .PARAMETER Force
     Skips confirmation prompts for deletions.
 
@@ -35,8 +31,8 @@
     Performs basic temporary file cleanup.
 
 .EXAMPLE
-    Invoke-TempFileCleanup -MinimumAge 7 -FileTypes "*.tmp","*.log" -GenerateReport
-    Cleans temp files older than 7 days with specific extensions and generates report.
+    Invoke-TempFileCleanup -MinimumAge 7 -FileTypes "*.tmp","*.log"
+    Cleans temp files older than 7 days with specific extensions.
 
 .NOTES
     Requires Administrator privileges for full functionality.
@@ -62,10 +58,6 @@ function Invoke-TempFileCleanup {
         [string[]]$ExcludePatterns,
 
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Generate HTML report")]
-        [switch]$GenerateReport,
-
-        [Parameter(Mandatory = $false,
                    HelpMessage = "Skip confirmation prompts")]
         [switch]$Force
     )
@@ -86,7 +78,6 @@ function Invoke-TempFileCleanup {
 
         # Initialize log files
         $LogFile = Join-Path $ModuleDir "TempFileCleanup_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        $ReportFile = Join-Path $ModuleDir "TempFileCleanup_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
 
         function Write-Log {
             param([string]$Message)
@@ -194,88 +185,6 @@ function Invoke-TempFileCleanup {
                 }
             }
         }
-
-        function New-HTMLReport {
-            param([hashtable]$Results)
-            $html = @"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Temporary File Cleanup Report - $(Get-Date -Format 'yyyy-MM-dd HH:mm')</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { background-color: #f0f0f0; padding: 10px; }
-        .location { margin: 20px 0; border: 1px solid #ddd; padding: 10px; }
-        .success { color: green; }
-        .error { color: red; }
-        .metric { margin: 10px 0; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f0f0f0; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Temporary File Cleanup Report</h1>
-        <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm')</p>
-        <p>Settings:</p>
-        <ul>
-            <li>Minimum Age: $MinimumAge days</li>
-            <li>File Types: $($FileTypes -join ', ')</li>
-            <li>Exclude Patterns: $($ExcludePatterns -join ', ')</li>
-        </ul>
-    </div>
-"@
-            foreach ($location in $Results.GetEnumerator()) {
-                $html += @"
-    <div class="location">
-        <h2>$($location.Key)</h2>
-        <p>$($script:TempLocations[$location.Key].Description)</p>
-        <div class="metric">
-            <table>
-                <tr><th>Files Found</th><td>$($location.Value.FilesFound)</td></tr>
-                <tr><th>Size Found</th><td>$([math]::Round($location.Value.SizeFound/1MB, 2)) MB</td></tr>
-                <tr><th>Files Deleted</th><td>$($location.Value.FilesDeleted)</td></tr>
-                <tr><th>Size Deleted</th><td>$([math]::Round($location.Value.SizeDeleted/1MB, 2)) MB</td></tr>
-            </table>
-        </div>
-"@
-                if ($location.Value.Errors.Count -gt 0) {
-                    $html += @"
-        <div class="metric">
-            <h3>Errors</h3>
-            <ul class="error">
-                $(($location.Value.Errors | ForEach-Object { "<li>$_</li>" }) -join "`n")
-            </ul>
-        </div>
-"@
-                }
-                $html += "</div>"
-            }
-
-            # Add summary
-            $totalFound = ($Results.Values | Measure-Object -Property FilesFound -Sum).Sum
-            $totalDeleted = ($Results.Values | Measure-Object -Property FilesDeleted -Sum).Sum
-            $totalSizeFound = ($Results.Values | Measure-Object -Property SizeFound -Sum).Sum
-            $totalSizeDeleted = ($Results.Values | Measure-Object -Property SizeDeleted -Sum).Sum
-
-            $html += @"
-    <div class="location">
-        <h2>Summary</h2>
-        <div class="metric">
-            <table>
-                <tr><th>Total Files Found</th><td>$totalFound</td></tr>
-                <tr><th>Total Size Found</th><td>$([math]::Round($totalSizeFound/1MB, 2)) MB</td></tr>
-                <tr><th>Total Files Deleted</th><td>$totalDeleted</td></tr>
-                <tr><th>Total Size Deleted</th><td>$([math]::Round($totalSizeDeleted/1MB, 2)) MB</td></tr>
-            </table>
-        </div>
-    </div>
-</body>
-</html>
-"@
-            $html | Out-File -FilePath $ReportFile -Encoding UTF8
-        }
     }
 
     process {
@@ -316,13 +225,6 @@ Size Deleted: $([math]::Round($results[$location.Key].SizeDeleted/1MB, 2)) MB
                     Write-Log "Location not found: $($location.Value.Path)"
                 }
             }
-
-            # Generate HTML report if requested
-            if ($GenerateReport) {
-                Write-Log "Generating HTML report..."
-                New-HTMLReport -Results $results
-                Write-Host "HTML report generated at: $ReportFile"
-            }
         }
         catch {
             $errorMessage = "Critical error during temporary file cleanup: $_"
@@ -332,12 +234,8 @@ Size Deleted: $([math]::Round($results[$location.Key].SizeDeleted/1MB, 2)) MB
     }
 
     end {
-        $summary = "Temporary file cleanup completed. Log file: $LogFile"
-        if ($GenerateReport) {
-            $summary += "`nReport file: $ReportFile"
-        }
-        Write-Log $summary
-        Write-Host $summary
+        Write-Log "Temporary file cleanup completed. Log file: $LogFile"
+        Write-Host "Temporary file cleanup completed. Log file: $LogFile"
     }
 }
 

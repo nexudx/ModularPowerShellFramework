@@ -23,8 +23,8 @@
     Starts the framework and displays the module selection prompt.
 
 .EXAMPLE
-    .\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-Verbose", "-GenerateReport")
-    Loads the DiskCheck module with verbose output and report generation.
+    .\Main.ps1 -ModuleName "DiskCheck" -ModuleParameters @("-Verbose")
+    Loads the DiskCheck module with verbose output.
 
 .NOTES
     Requires Administrator privileges for full functionality.
@@ -121,7 +121,7 @@ function Test-ModuleHealth {
 function Show-ModuleOutput {
     <#
     .SYNOPSIS
-        Displays module execution output including logs and reports.
+        Displays module execution output including logs.
     #>
     [CmdletBinding()]
     param(
@@ -140,19 +140,6 @@ function Show-ModuleOutput {
         if ($latestLog) {
             Write-Host "`nModule Log Output:" -ForegroundColor Cyan
             Get-Content -Path $latestLog.FullName | Write-Host
-        }
-
-        # Check for HTML report
-        $latestReport = Get-ChildItem -Path $moduleLogDir -Filter "*.html" |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-
-        if ($latestReport) {
-            Write-Host "`nHTML report generated: $($latestReport.FullName)" -ForegroundColor Green
-            # Optionally open the report
-            if ($PSCmdlet.ShouldProcess("Open HTML report?")) {
-                Start-Process $latestReport.FullName
-            }
         }
     }
     catch {
@@ -222,7 +209,7 @@ function Invoke-ModuleExecution {
 function Rotate-ModuleLogs {
     <#
     .SYNOPSIS
-        Enhanced log rotation with support for multiple file types.
+        Enhanced log rotation.
     #>
     [CmdletBinding()]
     param(
@@ -241,15 +228,13 @@ function Rotate-ModuleLogs {
         }
 
         # Rotate logs
-        foreach ($extension in @("*.log", "*.html")) {
-            $files = Get-ChildItem -Path $moduleLogDir -Filter $extension |
-                Sort-Object LastWriteTime -Descending |
-                Select-Object -Skip $RetainCount
+        $files = Get-ChildItem -Path $moduleLogDir -Filter "*.log" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -Skip $RetainCount
 
-            if ($files) {
-                $files | Remove-Item -Force -ErrorAction SilentlyContinue
-                Write-FrameworkLog "Rotated $($files.Count) $extension files for $ModuleName"
-            }
+        if ($files) {
+            $files | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-FrameworkLog "Rotated $($files.Count) log files for $ModuleName"
         }
     }
     catch {

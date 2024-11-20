@@ -9,7 +9,6 @@ A robust, modular PowerShell framework designed for system maintenance and admin
 - 🔌 **Modular Architecture**: Easily extendable with plug-and-play modules
 - 📝 **Comprehensive Logging**: Detailed logging with rotation for both framework and individual modules
 - 🛡️ **Enhanced Error Handling**: Robust error capture and reporting
-- 📊 **HTML Report Generation**: Visual representation of execution results
 - 🔐 **Automatic Privilege Elevation**: Seamless handling of administrator privileges
 - 🔄 **Parameter Validation**: Thorough validation of module parameters
 - 📈 **Performance Monitoring**: Execution time tracking and performance metrics

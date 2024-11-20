@@ -9,7 +9,6 @@
     - Rollback capability
     - Bandwidth control
     - Offline update support
-    - HTML reporting
     - Detailed logging
 
 .PARAMETER VerboseOutput
@@ -24,9 +23,6 @@
 .PARAMETER ExcludeKBs
     Array of KB numbers to exclude from installation.
 
-.PARAMETER GenerateReport
-    Generates a detailed HTML report of update results.
-
 .PARAMETER ScheduleReboot
     Schedule reboot time after updates (e.g., "22:00").
 
@@ -38,8 +34,8 @@
     Installs all available updates.
 
 .EXAMPLE
-    Invoke-WindowsUpdate -Categories "Security","Critical" -MaxBandwidth 10 -GenerateReport
-    Installs security and critical updates with bandwidth limit and generates report.
+    Invoke-WindowsUpdate -Categories "Security","Critical" -MaxBandwidth 10
+    Installs security and critical updates with bandwidth limit.
 
 .NOTES
     Requires Administrator privileges and PSWindowsUpdate module.
@@ -66,10 +62,6 @@ function Invoke-WindowsUpdate {
         [string[]]$ExcludeKBs,
 
         [Parameter(Mandatory = $false,
-                   HelpMessage = "Generate HTML report")]
-        [switch]$GenerateReport,
-
-        [Parameter(Mandatory = $false,
                    HelpMessage = "Schedule reboot time")]
         [string]$ScheduleReboot,
 
@@ -94,7 +86,6 @@ function Invoke-WindowsUpdate {
 
         # Initialize log files
         $LogFile = Join-Path $ModuleDir "WindowsUpdate_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-        $ReportFile = Join-Path $ModuleDir "WindowsUpdate_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
         $HistoryFile = Join-Path $ModuleDir "UpdateHistory.json"
 
         function Write-Log {
@@ -160,77 +151,6 @@ function Invoke-WindowsUpdate {
                 Write-Log "Error saving update history: $_"
             }
         }
-
-        function New-HTMLReport {
-            param(
-                [array]$Updates,
-                [hashtable]$Statistics
-            )
-            $html = @"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Windows Update Report - $(Get-Date -Format 'yyyy-MM-dd HH:mm')</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { background-color: #f0f0f0; padding: 10px; }
-        .update { margin: 20px 0; border: 1px solid #ddd; padding: 10px; }
-        .success { color: green; }
-        .error { color: red; }
-        .warning { color: orange; }
-        .metric { margin: 10px 0; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f0f0f0; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Windows Update Report</h1>
-        <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm')</p>
-    </div>
-    <div class="metric">
-        <h2>Statistics</h2>
-        <table>
-            <tr><th>Total Updates</th><td>$($Statistics.Total)</td></tr>
-            <tr><th>Successful</th><td>$($Statistics.Successful)</td></tr>
-            <tr><th>Failed</th><td>$($Statistics.Failed)</td></tr>
-            <tr><th>Duration</th><td>$($Statistics.Duration)</td></tr>
-        </table>
-    </div>
-    <div class="update">
-        <h2>Installed Updates</h2>
-        <table>
-            <tr>
-                <th>Title</th>
-                <th>KB</th>
-                <th>Category</th>
-                <th>Status</th>
-            </tr>
-"@
-            foreach ($update in $Updates) {
-                $statusClass = switch ($update.Status) {
-                    "Installed" { "success" }
-                    "Failed" { "error" }
-                    default { "warning" }
-                }
-                $html += @"
-            <tr>
-                <td>$($update.Title)</td>
-                <td>$($update.KB)</td>
-                <td>$($update.Category)</td>
-                <td class="$statusClass">$($update.Status)</td>
-            </tr>
-"@
-            }
-            $html += @"
-        </table>
-    </div>
-</body>
-</html>
-"@
-            $html | Out-File -FilePath $ReportFile -Encoding UTF8
-        }
     }
 
     process {
@@ -292,13 +212,6 @@ function Invoke-WindowsUpdate {
                 # Save to history
                 Save-UpdateHistory -Updates $result
 
-                # Generate report if requested
-                if ($GenerateReport) {
-                    Write-Log "Generating HTML report..."
-                    New-HTMLReport -Updates $result -Statistics $statistics
-                    Write-Host "HTML report generated at: $ReportFile"
-                }
-
                 # Handle reboot if needed
                 if ($result.RebootRequired) {
                     if ($ScheduleReboot) {
@@ -329,12 +242,8 @@ function Invoke-WindowsUpdate {
     }
 
     end {
-        $summary = "Windows Update process completed. Log file: $LogFile"
-        if ($GenerateReport) {
-            $summary += "`nReport file: $ReportFile"
-        }
-        Write-Log $summary
-        Write-Host $summary
+        Write-Log "Windows Update process completed. Log file: $LogFile"
+        Write-Host "Windows Update process completed. Log file: $LogFile"
     }
 }
 
